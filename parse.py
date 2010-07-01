@@ -10,6 +10,11 @@ import numpy
 # TODO:
 # remove all double quotes, empty lines, wrong lines
 # adding empty columns if needed
+<<<<<<< HEAD
+=======
+# place Addit field in <<>>
+# replace % by \%
+>>>>>>> bash_parser
 #
 # –егул€ркой отделить буквы от номера в позиционном обозначении
 # использовать функцию int() дл€ преобразовани€ строки в число
