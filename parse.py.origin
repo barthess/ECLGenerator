@@ -10,6 +10,8 @@ import numpy
 # TODO:
 # remove all double quotes, empty lines, wrong lines
 # adding empty columns if needed
+# replace % by \%
+# place Addit field in <<>>
 #
 # –егул€ркой отделить буквы от номера в позиционном обозначении
 # использовать функцию int() дл€ преобразовани€ строки в число
