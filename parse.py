@@ -51,7 +51,7 @@ pos_names = sorted(component_des.keys())
 # бќльшей шириы, прочитать файл в tabarry и удалить последнюю строку
 
 # reading file into array {{{
-x = tb.tabarray(SVfile = "test/_tmp0_last1.tex",delimiter = '&',headerlines=1)
+x = tb.tabarray(SVfile = "test/_tmp0_only1.tex",delimiter = '&',headerlines=1)
 x = x[:-1] # remove last line
 tmp_tab = x # create temporal array}}}
 
@@ -179,17 +179,17 @@ def offset_parse(): # заполнение последних двух столбцов таблицы position_names{
 
 
 def pe3():
-	pe3_in = x # empty table
+	pe3_in = x 
 	pe3_out = x[:0] # empty table
 
 	# merge columns
 	m = 0 
 	while m < len(pe3_in):
-		pe3_in['Title'][m] = pe3_in['Type'][m]\
-				+pe3_in['SType'][m]+ ' ' \
-				+pe3_in['Value'][m]+ ' ' \
-				+pe3_in['Docum'][m]+ ' ' \
-				+pe3_in['Addit'][m]
+		pe3_in['Title'][m] = pe3_in['Type'][m] + \
+				pe3_in['SType'][m] + ' ' + \
+				pe3_in['Value'][m] + ' ' + \
+				pe3_in['Docum'][m] + ' ' + \
+				pe3_in['Addit'][m]
 		m+=1
 
 	# rename 'Title' column
@@ -206,10 +206,86 @@ def pe3():
 	tmp_tab = pe3_in.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
 	pe3_in = tmp_tab
 
+
+	for key in pos_names:
+		# catch one RefDes
+		component_slice = pe3_in[ component_des[key][2] : (component_des[key][2] + component_des[key][3]) ]
+
+		# take first row
+		tmp_tab = component_slice[:1]
+
+		# ќбработка р€дов, когда их больше одного {{{
+		m = 0
+		if len(component_slice) > 1:
+			prev = component_slice['RefDes'][m]	+	component_slice['Item'][m] +	component_slice['Note'][m]
+			next = component_slice['RefDes'][m+1] + component_slice['Item'][m+1] +	component_slice['Note'][m+1]
+
+			while m < (len(component_slice)-2): 
+				if next == prev:
+					# take next row
+					prev = next
+					next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
+				else: # сюда попадаем, если натыкаемс€ на незнакомую строку
+					# добавим эту незнакомую строку в tmp_tab
+					tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
+							component_slice['RefDesNum'][m+1], \
+							component_slice['Item'][m+1], \
+							component_slice['Sum'][m+1], \
+							component_slice['Note'][m+1]))
+					# take next row
+					prev = next
+					next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
+				m += 1
+
+			# персонально обработаем последний р€д
+			# либо добавитьс€ новый, либо изменитс€ RefDesNUm
+			if next == prev:
+				tmp_tab['RefDesNum'][len(tmp_tab)-1] = component_slice['RefDesNum'][m+1]
+			else:
+				tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
+						component_slice['RefDesNum'][m+1], \
+						component_slice['Item'][m+1], \
+						component_slice['Sum'][m+1], \
+						component_slice['Note'][m+1]))
+		#}}}
 	
+		# обновим RefDes
+		if len(tmp_tab) == 1:
+			sum = int(tmp_tab['RefDesNum'][0])
+			if sum > 2:
+				refdes = str(key) + '1' + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][0])
+			if sum == 2:
+				refdes = str(key) + '1' + ',' + str(key) + str(tmp_tab['RefDesNum'][0])
+			if sum == 1:
+				refdes = str(key) + str(tmp_tab['RefDesNum'][0])
 
+			tmp_tab['RefDes'][0] = refdes
+			tmp_tab['Sum'][0] = sum
 
+		else:
+			m = 0
+			while True:
+				if m == 0:
+					sum = int(tmp_tab['RefDesNum'][m])
+				else:
+					sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1]) + 1
 
+					if sum > 2:
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1]) + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][m])
+					if sum == 2:
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1]) + ',' + str(key) + str(tmp_tab['RefDesNum'][m])
+					if sum == 1:
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
+
+				# if we have more then one item in first line
+				if sum > 0:
+					tmp_tab['RefDes'][m] = refdes
+					tmp_tab['Sum'][m] = sum
+				if m >= len(tmp_tab)-1:
+					break
+				m += 1
+
+		print tmp_tab
 
 
 
