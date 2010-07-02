@@ -6,6 +6,8 @@ import string
 import re
 import tabular as tb
 import numpy
+from operator import itemgetter # for sort() and sorted()
+
 
 # TODO:
 # remove all double quotes, empty lines, wrong lines
@@ -15,20 +17,32 @@ import numpy
 # использовать функцию int() для преобразования строки в число
 
 
+
+# preparing some data structures {{{
+
+
+# данный список содержит названия колонок, как их генерит P-CAD в нужном порядке
 right_order = ['RefDes', 'RefDesNum', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode']
 right_num = len(right_order)
 
 
-# словарь для поиска по готовому массиву {{{
-position_names = {	'C' : ('Конденсатор','Конденсаторы'), \
-					'R' : ('Резистор','Резисторы'), \
-					'VD': ('Диод','Диоды'), \
-					'XP': ('Вилка','Вилки'), \
-					'XS': ('Розетка','Розетки'), \
-					'D' : ('Микросхема','Микросхемы'), \
-					'DA': ('Микросхема','Микросхемы'), \
-					'DD': ('Микросхема','Микросхемы'), \
+# словарь для поиска по готовому массиву 
+# 
+# Как заполнять:
+# 'key' : ['ед. число','мн. число','смещение','количество']
+#
+# Смещение и количество по умолчанию равны -1, они будут заполняться автоматически
+# по мере анализа главной таблицы.
+component_des = {	'C' : ['Конденсатор','Конденсаторы',-1,-1], \
+					'R' : ['Резистор','Резисторы',-1,-1], \
+					'D' : ['Микросхема','Микросхемы',-1,-1], \
+					'DA': ['Микросхема','Микросхемы',-1,-1], \
+					'DD': ['Микросхема','Микросхемы',-1,-1], \
+					'VD': ['Диод','Диоды',-1,-1], \
+					'XP': ['Вилка','Вилки',-1,-1], \
+					'XS': ['Розетка','Розетки',-1,-1], \
 					}
+pos_names = sorted(component_des.keys())
 #}}}
 
 
@@ -37,9 +51,15 @@ position_names = {	'C' : ('Конденсатор','Конденсаторы'), \
 # бОльшей шириы, прочитать файл в tabarry и удалить последнюю строку
 
 # reading file into array {{{
-x = tb.tabarray(SVfile = '_tmp0_last1.tex',delimiter = '&',headerlines=1)
+x = tb.tabarray(SVfile = "test/_tmp0_last1.tex",delimiter = '&',headerlines=1)
 x = x[:-1] # remove last line
 tmp_tab = x # create temporal array}}}
+
+
+def usage(): #{{{
+	print """ stub """
+#}}}
+
 
 def prepare(x): # cleaning table {{{
 
@@ -103,7 +123,8 @@ def prepare(x): # cleaning table {{{
 		m = 0
 		flag = 0
 	x = tmp_tab # now x contain only suitable columns
-	#}}}
+
+#}}}
 
 
 	# stack columns 1 by 1 in right order{{{
@@ -113,7 +134,6 @@ def prepare(x): # cleaning table {{{
 		z = tmp_tab.colstack(x[[right_order[m]]])
 		tmp_tab = z
 		m+=1
-
 	x = z # now x contain columns in right order 
 	#}}}
 
@@ -135,68 +155,66 @@ def prepare(x): # cleaning table {{{
 	x.replace('%',"\%",strict=False)
 	#print x['Addit']
 	#}}}
+
+	return x
+#}}}
+
+
+def offset_parse(): # заполнение последних двух столбцов таблицы position_names{{{
+	for key in pos_names:
+		#print '---',key
+		m = 0
+		i = 0
+		while m < len(x):
+			if x['RefDes'][m] == key:
+				i += 1
+				if component_des[key][2] == -1:
+					component_des[key][2] = m # смещение
+			m += 1
+		component_des[key][3] = i # количество
 #}}}
 
 
 
 
-# now x contain final data. DO NOT touch them anymore!
-prepare(x)
 
+def pe3():
+	pe3_in = x # empty table
+	pe3_out = x[:0] # empty table
 
-
-
-
-def pe3(): # aggregate strings together for component list (PE3){{{
-
-	# catch strings with subsequent RefDes
-	# first take capacitors
-	my_list = []
-	C = ["Конденсатор", "Конденсаторы", "capacitors"] 
-	my_list.append(C)
-	R = ["Резистор","Резисторы","resistors"]
-	my_list.append(R)
-
-	m = 0
-	n_begin = -1
-	n_total = 0
-	while m < len(x):
-		RefDes = x['RefDes'][m]
-		#print RefDes, RefDes[0:2]
-		if RefDes[0:1] == 'C':
-			if n_begin == -1:
-				n_begin = m # first occurrence
-			n_total += 1 # next occurrences increment end point
-		m+=1
-
-	#print n_begin
-	#print n_total
-	capacitors = x[right_order][n_begin:(n_begin+n_total)]
-	#print capacitors
-
+	# merge columns
 	m = 0 
-	while m < len(capacitors):
-		#print capacitors['Title'][m]
-		capacitors['Title'][m] = capacitors['Type'][m]\
-				+capacitors['SType'][m]+ ' ' \
-				+capacitors['Value'][m]+ ' ' \
-				+capacitors['Docum'][m]+ ' ' \
-				+capacitors['Addit'][m]
+	while m < len(pe3_in):
+		pe3_in['Title'][m] = pe3_in['Type'][m]\
+				+pe3_in['SType'][m]+ ' ' \
+				+pe3_in['Value'][m]+ ' ' \
+				+pe3_in['Docum'][m]+ ' ' \
+				+pe3_in['Addit'][m]
 		m+=1
 
 	# rename 'Title' column
-	capacitors.renamecol('Title','Item')
+	pe3_in.renamecol('Title','Item')
 
 	# rename and clean 'Addit' columnt
-	capacitors.renamecol('Addit','Sum')
+	pe3_in.renamecol('Addit','Sum')
 	m = 0 
-	while m < len(capacitors):
-		capacitors['Sum'][m] = ''
+	while m < len(pe3_in):
+		pe3_in['Sum'][m] = ''
 		m += 1
 
 	# remove unnecessary columns
-	tmp_tab = capacitors.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
-	capacitors = tmp_tab
+	tmp_tab = pe3_in.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
+	pe3_in = tmp_tab
+
+	
+
+
+
+
+
+
+
+def old_pe3(): # aggregate strings together for component list (PE3)
 
 
 	# now we have 'RefDes','Item','Sum','Note'
@@ -259,10 +277,21 @@ def pe3(): # aggregate strings together for component list (PE3){{{
 		tmp_tab['Sum'][len(tmp_tab)-1] = (lastRefDes - prevRefDes + 1)
 		tmp_tab['RefDes'][len(tmp_tab)-1] = ('C' + str(prevRefDes) + '\dots ' + 'C' + str(lastRefDes))
 	return(tmp_tab)
-	#}}}
 
 
-#pe3()
+
+
+
+
+# now x contain final data. DO NOT touch them anymore!
+x = prepare(x)
+
+# анализ главного массива
+offset_parse()
+
+
+# build component list PE3
+pe3()
 
 
 
