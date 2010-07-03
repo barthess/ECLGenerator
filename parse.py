@@ -63,20 +63,20 @@ def usage(): #{{{
 
 def prepare(x): # cleaning table {{{
 
-
 	# split 'RefDes' column in two columns {{{
 	refdes = []
 	refdes_num = []
 	# получим столбец цифр
 	m = 0
 	while m < len(x):
-		refdes_num.append(re.sub('[a-zA-Z]*','',x['RefDes'][m]))
+		refdes_num.append(int(re.sub('[a-zA-Z]*','',x['RefDes'][m])))
 		m += 1	
 	# в RefDes запишем только буквы
 	m = 0
 	while m < len(x):
 		x['RefDes'][m] = (re.sub('[0-9]*','',x['RefDes'][m]))
 		m += 1
+	# добавим столбец номеров
 	tmp_tab = x.addcols([refdes_num], names='RefDesNum')
 	x = tmp_tab
 	#}}}
@@ -141,7 +141,8 @@ def prepare(x): # cleaning table {{{
 	# add russian LaTeX quotas to column 'Addit'{{{
 	m = 0
 	while m < len(x):
-		x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
+		if re.search('^[	]*$', x['Addit'][m]) == None:
+			x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
 		# BUG: when string ends by 'or' - this end was gobbled
 		# my be, do this with regexp string by string?
 		# print x['Addit'][m]
@@ -152,17 +153,15 @@ def prepare(x): # cleaning table {{{
 	# cleaning data{{{
 	x.replace('<< ','<<',strict=False,cols='Addit')
 	x.replace(' >>','>>',strict=False,cols='Addit')
-	x.replace('%',"\%",strict=False)
-	#print x['Addit']
+	x.replace('%',"\%",strict=False,cols=('Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'))
 	#}}}
-
 	return x
+
 #}}}
 
 
-def offset_parse(): # заполнение последних двух столбцов таблицы position_names{{{
+def offset_parse(x): # заполнение последних двух столбцов таблицы position_names{{{
 	for key in pos_names:
-		#print '---',key
 		m = 0
 		i = 0
 		while m < len(x):
@@ -172,15 +171,13 @@ def offset_parse(): # заполнение последних двух столбцов таблицы position_names{
 					component_des[key][2] = m # смещение
 			m += 1
 		component_des[key][3] = i # количество
+	return x
 #}}}
 
 
-
-
-
-def pe3():
+def pe3(): # создание таблицы дл€ перечн€ элементов{{{
 	pe3_in = x 
-	pe3_out = x[:0] # empty table
+	firstrun = True
 
 	# merge columns
 	m = 0 
@@ -203,18 +200,15 @@ def pe3():
 		m += 1
 
 	# remove unnecessary columns
-	tmp_tab = pe3_in.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
-	pe3_in = tmp_tab
-
-
-	for key in pos_names:
+	pe3_in = pe3_in.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
+		
+	for key in pos_names: # ”плотнение р€дов {{{
 		# catch one RefDes
 		component_slice = pe3_in[ component_des[key][2] : (component_des[key][2] + component_des[key][3]) ]
 
 		# take first row
 		tmp_tab = component_slice[:1]
 
-		# ќбработка р€дов, когда их больше одного {{{
 		m = 0
 		if len(component_slice) > 1:
 			prev = component_slice['RefDes'][m]	+	component_slice['Item'][m] +	component_slice['Note'][m]
@@ -228,14 +222,19 @@ def pe3():
 				else: # сюда попадаем, если натыкаемс€ на незнакомую строку
 					# добавим эту незнакомую строку в tmp_tab
 					tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
-							component_slice['RefDesNum'][m+1], \
+							component_slice['RefDesNum'][m+1] - 1, \
 							component_slice['Item'][m+1], \
 							component_slice['Sum'][m+1], \
 							component_slice['Note'][m+1]))
+					# сместим RefDesNum на одну позицию назад, чтобы не тер€лись значени€
+					tmp_tab['RefDesNum'][len(tmp_tab) - 2] = tmp_tab['RefDesNum'][len(tmp_tab) - 1]
 					# take next row
 					prev = next
 					next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
 				m += 1
+			
+			# по выходу из цикла поправим предпоследний р€д после смещени€
+			tmp_tab['RefDesNum'][len(tmp_tab) - 1] = component_slice['RefDesNum'][m+1] - 1
 
 			# персонально обработаем последний р€д
 			# либо добавитьс€ новый, либо изменитс€ RefDesNUm
@@ -248,32 +247,27 @@ def pe3():
 						component_slice['Sum'][m+1], \
 						component_slice['Note'][m+1]))
 		#}}}
-	
-		# обновим RefDes
-		if len(tmp_tab) == 1:
-			sum = int(tmp_tab['RefDesNum'][0])
-			if sum > 2:
-				refdes = str(key) + '1' + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][0])
-			if sum == 2:
-				refdes = str(key) + '1' + ',' + str(key) + str(tmp_tab['RefDesNum'][0])
-			if sum == 1:
-				refdes = str(key) + str(tmp_tab['RefDesNum'][0])
 
-			tmp_tab['RefDes'][0] = refdes
-			tmp_tab['Sum'][0] = sum
-
-		else:
+		# обновление пол€ RefDes {{{
+		if len(tmp_tab) > 0:
 			m = 0
-			while True:
-				if m == 0:
+			while m < len(tmp_tab):
+				sum = 0
+				if m == 0: # если мы в первом р€ду
 					sum = int(tmp_tab['RefDesNum'][m])
-				else:
-					sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1]) + 1
-
 					if sum > 2:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1]) + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = str(key) + '1' + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][m])
 					if sum == 2:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1]) + ',' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = str(key) + '1' + ',' + str(key) + str(tmp_tab['RefDesNum'][m])
+					if sum == 1:
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
+
+				else:
+					sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1])
+					if sum > 2:
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][m])
+					if sum == 2:
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + ',' + str(key) + str(tmp_tab['RefDesNum'][m])
 					if sum == 1:
 						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
 
@@ -281,78 +275,79 @@ def pe3():
 				if sum > 0:
 					tmp_tab['RefDes'][m] = refdes
 					tmp_tab['Sum'][m] = sum
-				if m >= len(tmp_tab)-1:
-					break
 				m += 1
+		#}}}
+		
+		tmp_tab = tmp_tab.deletecols('RefDesNum') # remove unneeded column
 
-		print tmp_tab
+		# add LaTeX new line symbol {{{
+		m = 0
+		last_col = str(tmp_tab.dtype.names[-1:])[2:-3]
+		while m < len(tmp_tab):
+			# may be better '\tabularnewline'?
+			tmp_tab[last_col][m] = tmp_tab[last_col][m] + '\\\\'
+			m += 1
+		# first and last must be ends by non breakable symbols
+		tmp_tab[last_col][0] = tmp_tab[last_col][0] + '*'
+		if len(tmp_tab) > 1:
+			tmp_tab[last_col][-1:] = tmp_tab[last_col][-1:][0] + '*'
+		if len(tmp_tab) > 2:
+			tmp_tab[last_col][-2:-1] = tmp_tab[last_col][-2:-1][0] + '*'
+		#}}}
+		
+		# ¬ставка типа компонента в список и сборка в одну выходную таблицу {{{
+		foot = tb.tabarray(records=[('','','','\\\\*'),('','','','\\\\')], names=(tmp_tab.dtype.names))
+
+		if len(tmp_tab) > 1: # у нас больше 1 наименовани€ компонентов
+			# шапка и хвост дл€ блока из одного типа элементов
+			title = '\hfill\underline{'+component_des[key][1] + '}\hfill'
+			head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
+			
+			# соберем в кучу шапку, тело и хвост
+			if firstrun:
+				pe3_out = head.rowstack([tmp_tab,foot])
+				firstrun = False
+			else:
+				pe3_out = pe3_out.rowstack([head,tmp_tab,foot])
+
+		else: # наименование только одно
+			# название вставл€етс€ пр€мо в строку
+			tmp_tab['Item'][0] = component_des[key][0] + ' ' + tmp_tab['Item'][0]
+
+			if firstrun:
+				pe3_out = tmp_tab.rowstack([foot])
+				firstrun = False
+			else:
+				pe3_out = pe3_out.rowstack([tmp_tab,foot])
+		#}}}
+
+	# запись полученной таблицы на диск
+	pe3_out.saveSV('pe3.tex', delimiter='&')
+#}}}
+
+
+def wrappe3():
+	with open('pe3.tex','r') as f:
+		data = f.readlines()
+		f.close()
+	
+	with open('preamble_pe3.tex','r') as f:
+		preamble = f.read()
+		f.close()
+	
+	with open('out.tex','w') as f:
+		f.write(preamble)
+		m = 1 # чтобы пропустить первую строку
+		while m < len(data):
+			f.write(data[m])
+			f.close
+			m += 1
 
 
 
 
-def old_pe3(): # aggregate strings together for component list (PE3)
 
 
-	# now we have 'RefDes','Item','Sum','Note'
-	# first and last lines process separatly
-	m = 0
-	flag_equal = 0
-	prevRefDes = (m+1)
-	nextRefDes = (m+2)
-	lastRefDes = len(capacitors)
-
-	# forming first line to tmp_tab
-	tmp_tab = capacitors[:1] 
-	tmp_tab['RefDes'][0] = 'C' + str(prevRefDes)
-	tmp_tab['Sum'][0] = 1
-
-	if len(capacitors) > 1:
-		prev = capacitors['Item'][m] + capacitors['Note'][m]
-		next = capacitors['Item'][m+1] + capacitors['Note'][m+1]
-		while m < (len(capacitors)-1):
-			if next == prev:
-				prev = next
-				next = capacitors['Item'][m+1] + capacitors['Note'][m+1]
-				m += 1
-			else: # сюда попадаем, если натыкаемс€ на незнакомую строку
-				# добавим эту незнакомую строку в tmp_tab
-				tmp_tab = tmp_tab.addrecords((capacitors['RefDes'][m], \
-						capacitors['Item'][m], \
-						capacitors['Sum'][m], \
-						capacitors['Note'][m]))
-				prev = next
-				next = capacitors['Item'][m+1] + capacitors['Note'][m+1]
-				nextRefDes = m
-				print prevRefDes, nextRefDes, m
-				print tmp_tab
-
-
-
-
-				# обновим RefDes
-				sum = nextRefDes - prevRefDes + 1
-				if sum > 2:
-					refdes = 'C' + str(prevRefDes) + '\dots ' + 'C' + str(nextRefDes)
-				if sum == 2:
-					refdes = 'C' + str(prevRefDes) + ',' + 'C' + str(nextRefDes)
-				if sum == 1:
-					refdes = 'C' + str(nextRefDes)
-				# if we have more then one item in first line
-				if sum > 0:
-					tmp_tab['RefDes'][len(tmp_tab)-2] = refdes
-					# запишем в предыдущую строку количество элементов
-					tmp_tab['Sum'][len(tmp_tab)-2] = sum
-				print tmp_tab
-
-				prevRefDes = m + 1
-				m += 1
-
-		# действи€ по выходу из цикла
-		print "out of cycle", prevRefDes, lastRefDes
-
-		tmp_tab['Sum'][len(tmp_tab)-1] = (lastRefDes - prevRefDes + 1)
-		tmp_tab['RefDes'][len(tmp_tab)-1] = ('C' + str(prevRefDes) + '\dots ' + 'C' + str(lastRefDes))
-	return(tmp_tab)
 
 
 
@@ -362,33 +357,16 @@ def old_pe3(): # aggregate strings together for component list (PE3)
 # now x contain final data. DO NOT touch them anymore!
 x = prepare(x)
 
+
 # анализ главного массива
-offset_parse()
+x = offset_parse(x)
 
 
 # build component list PE3
 pe3()
 
 
-
-
-
-
-
-
-# теперь надо или снабдить шапкой типа \underline{ онденсаторы} или дописать " онденсатор" по месту
-
-
-
-#print tmp_tab
-#print capacitors.dtype
-#print capacitors[0]
-
-
-
-
-
-
+wrappe3()
 
 
 
@@ -411,14 +389,4 @@ pe3()
 
 
 
-x.saveSV('SampleData.csv', delimiter='&')
-
-# sort by RefDes (badly works without leading zero)
-# x.sort(order='RefDes')
-
-# 			
-
-
-
-#print(x)
 
