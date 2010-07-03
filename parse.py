@@ -51,7 +51,7 @@ pos_names = sorted(component_des.keys())
 # бОльшей шириы, прочитать файл в tabarry и удалить последнюю строку
 
 # reading file into array {{{
-x = tb.tabarray(SVfile = "test/_tmp0_only1.tex",delimiter = '&',headerlines=1)
+x = tb.tabarray(SVfile = "test/_tmp0_mid2.tex",delimiter = '&',headerlines=1)
 x = x[:-1] # remove last line
 tmp_tab = x # create temporal array}}}
 
@@ -249,6 +249,8 @@ def pe3(): # создание таблицы для перечня элементов{{{
 		#}}}
 
 		# обновление поля RefDes {{{
+		# Возможно понадобится что-то вроде \scalebox{0.8}[1]{R133\dots R145} или \resizebox
+
 		if len(tmp_tab) > 0:
 			m = 0
 			while m < len(tmp_tab):
@@ -256,18 +258,19 @@ def pe3(): # создание таблицы для перечня элементов{{{
 				if m == 0: # если мы в первом ряду
 					sum = int(tmp_tab['RefDesNum'][m])
 					if sum > 2:
-						refdes = str(key) + '1' + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = str(key) + '1' + '\mbox{.\kern -0.3mm .\kern -0.3mm .}' + str(key) + str(tmp_tab['RefDesNum'][m])
 					if sum == 2:
-						refdes = str(key) + '1' + ',' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = str(key) + '1' + ', ' + str(key) + str(tmp_tab['RefDesNum'][m])
 					if sum == 1:
 						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
 
 				else:
 					sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1])
 					if sum > 2:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + '\dots ' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + '\mbox{.\kern -0.3mm .\kern -0.3mm .}' \
+								+ str(key) + str(tmp_tab['RefDesNum'][m])
 					if sum == 2:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + ',' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + ', ' + str(key) + str(tmp_tab['RefDesNum'][m])
 					if sum == 1:
 						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
 
@@ -300,7 +303,7 @@ def pe3(): # создание таблицы для перечня элементов{{{
 
 		if len(tmp_tab) > 1: # у нас больше 1 наименования компонентов
 			# шапка и хвост для блока из одного типа элементов
-			title = '\hfill\underline{'+component_des[key][1] + '}\hfill'
+			title = '\centering\underline{'+component_des[key][1] + '}'
 			head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
 			
 			# соберем в кучу шапку, тело и хвост
@@ -322,15 +325,17 @@ def pe3(): # создание таблицы для перечня элементов{{{
 		#}}}
 
 	# запись полученной таблицы на диск
-	pe3_out.saveSV('pe3.tex', delimiter='&')
+	pe3_out.saveSV('pe3.tmp', delimiter='&')
 #}}}
 
 
 def wrappe3():
-	with open('pe3.tex','r') as f:
+	with open('pe3.tmp','r') as f:
 		data = f.readlines()
 		f.close()
 	
+	# тут вставить исключение, если не найден файл
+	# и вместо файла использовать готовый набор строк
 	with open('preamble_pe3.tex','r') as f:
 		preamble = f.read()
 		f.close()
@@ -340,9 +345,9 @@ def wrappe3():
 		m = 1 # чтобы пропустить первую строку
 		while m < len(data):
 			f.write(data[m])
-			f.close
 			m += 1
-
+		f.write('\end{ESKDcomponentList}\end{document}')
+		f.close
 
 
 

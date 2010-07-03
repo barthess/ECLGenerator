@@ -1,1 +1,6 @@
 *.csv
+*.pdf
+*.aux
+*.tmp
+*.log
+out.tex
