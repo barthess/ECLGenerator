@@ -10,7 +10,7 @@ from operator import itemgetter # for sort() and sorted()
 
 
 # TODO:
-# remove all double quotes, empty lines, wrong lines
+# remove all empty lines, wrong lines
 # adding empty columns if needed
 #
 # –егул€ркой отделить буквы от номера в позиционном обозначении
@@ -285,7 +285,7 @@ def pe3(): # создание таблицы дл€ перечн€ элементов{{{
 
 		# add LaTeX new line symbol {{{
 		m = 0
-		last_col = str(tmp_tab.dtype.names[-1:])[2:-3]
+		last_col = tmp_tab.dtype.names[-1:][0]
 		while m < len(tmp_tab):
 			# may be better '\tabularnewline'?
 			tmp_tab[last_col][m] = tmp_tab[last_col][m] + '\\\\'
@@ -329,7 +329,7 @@ def pe3(): # создание таблицы дл€ перечн€ элементов{{{
 #}}}
 
 
-def wrappe3():
+def wrappe3(): # ‘ункци€, снабжающа€ перечень элементов преамбулой {{{
 	with open('pe3.tmp','r') as f:
 		data = f.readlines()
 		f.close()
@@ -340,7 +340,7 @@ def wrappe3():
 		preamble = f.read()
 		f.close()
 	
-	with open('out.tex','w') as f:
+	with open('pe3.tex','w') as f:
 		f.write(preamble)
 		m = 1 # чтобы пропустить первую строку
 		while m < len(data):
@@ -348,7 +348,7 @@ def wrappe3():
 			m += 1
 		f.write('\end{ESKDcomponentList}\end{document}')
 		f.close
-
+#}}}
 
 
 
@@ -371,6 +371,7 @@ x = offset_parse(x)
 pe3()
 
 
+# завернем перечень в преамбулу
 wrappe3()
 
 
