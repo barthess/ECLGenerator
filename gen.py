@@ -14,8 +14,8 @@ import argparse
 # дефолтный список колонок {{{
 # данный список содержит правильные названия колонок, как их генерит P-CAD
 # они должны идти в том порядке, как должны появляться перечне
-right_order = ['RefDes', 'RefDesNum', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode']
-right_num = len(right_order)
+column_names = ['RefDes', 'RefDesNum', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode']
+column_num = len(column_names)
 #}}}
 
 # словарь для поиска по готовому массиву {{{
@@ -81,11 +81,50 @@ bill_epilog = '''
 		'''
 		#}}}
 #}}}
+
 #}}}
 
 
 # command line parser{{{
-parser = argparse.ArgumentParser(description='**** description goes here ****')
+parser = argparse.ArgumentParser(
+		usage='',
+		formatter_class=argparse.RawDescriptionHelpFormatter,
+		description=('''\
+------------------------ P-CAD section ---------------------------------------
+
+Open schematic design in P-CAD. Go to menu File -> Reports.
+You will see configuration dialog. Tune them.
+
+Report destination: File
+Style Format: Separated List
+List Separator: &
+Reports to generate: check only "Attributes (atr)"
+
+Press "Customize"
+  On tab "Format":
+    Ensure that "Include Column Header" is checked (by default is checked)
+  On tab "Selection":
+    Chose needed component attributes (all by default)
+  On tab "Sort":
+    "Selected Field" must be "RefDes" (by default)
+  Other tabs leave as is.
+  Press "OK"
+
+On main dialog specify output filename
+Press "Generate"
+
+  Note: You may record all this action to P-CAD macro, and call them later.
+  
+Now you have list of components. 
+Process generated list by this script.
+
+
+------------------------ Script section --------------------------------------
+'''))
+
+
+
+
 
 # name of input file mandatory argument
 parser.add_argument('input_file', #{{{
@@ -103,7 +142,7 @@ parser.add_argument('-c','--columns',#{{{
 		metavar=('str'),
 		type=str,
 		help='space separated column names in right order \n (default: %(default)s)',
-		default='RefDes RefDesNum Title')
+		default=column_names)
 		#}}}
 parser.add_argument('-p','--pe3_preamble',#{{{
 		nargs=1,
@@ -116,7 +155,7 @@ parser.add_argument('-s','--spec_preamble', #{{{
 		nargs=1,
 		type=str,
 		metavar='/path/to/file.tex',
-		help='LaTeX preamble to the component list (default: %(default)s)',
+		help='LaTeX preamble to the specification (default: %(default)s)',
 		default='./spec_preamble.tex')
 		#}}}
 parser.add_argument('-b','--bill_preamble',#{{{
@@ -164,10 +203,6 @@ x = x[:-1] # remove last line
 tmp_tab = x # create temporal array}}}
 
 
-def usage(): #{{{
-	print """ stub """
-#}}}
-
 
 def prepare(x): # cleaning table {{{
 
@@ -194,8 +229,8 @@ def prepare(x): # cleaning table {{{
 	m = 0 
 	flag = 0
 	for i in x.dtype.names: 
-		while m < right_num: 
-			if right_order[m] == i: # raise flag if any match
+		while m < column_num: 
+			if column_names[m] == i: # raise flag if any match
 				flag = 1
 			m+=1
 		if flag == 0:
@@ -220,7 +255,7 @@ def prepare(x): # cleaning table {{{
 	col_num = len(col_names)
 	m = 0
 	flag = 0
-	for i in right_order:
+	for i in column_names:
 		while m < col_num:
 			if col_names[m] == i: # raise flag if any match
 				flag = 1
@@ -238,8 +273,8 @@ def prepare(x): # cleaning table {{{
 	# stack columns 1 by 1 in right order{{{
 	tmp_tab = x[['RefDes']] # save to tmp_tab first column
 	m = 1
-	while m < right_num: 
-		z = tmp_tab.colstack(x[[right_order[m]]])
+	while m < column_num: 
+		z = tmp_tab.colstack(x[[column_names[m]]])
 		tmp_tab = z
 		m+=1
 	x = z # now x contain columns in right order 
