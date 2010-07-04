@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- coding: cp1251 -*-
 
+# TODO
+# скрипт не умеет определять наличие неизвестных типов элементов
+
 
 import string
 import re
@@ -192,9 +195,10 @@ out = open('cleaned_output.tmp','r+')
 for line in raw_input:
 	# использование в регулярках '$' почему-то не прокатывает
 	if re.search('^[	]*\r\n', line) == None: # if string non empty
-		line = re.sub('"&"','&',line)
-		line = re.sub('^"','',line)
-		line = re.sub('"\r\n','\r\n',line) 
+		line = re.sub('"','',line)
+		#line = re.sub('"&"','&',line)
+		#line = re.sub('^"','',line)
+		#line = re.sub('"\r\n','\r\n',line) 
 		out.write(line)
 
 # из-за недоработок колонки не могут расширяться динамически
@@ -313,9 +317,6 @@ def prepare(x): # cleaning table {{{
 	while m < len(x):
 		if re.search('^[	]*$', x['Addit'][m]) == None:
 			x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
-		# BUG: when string ends by 'or' - this end was gobbled
-		# my be, do this with regexp string by string?
-		# print x['Addit'][m]
 		m+=1
 	#}}}
 
@@ -341,6 +342,10 @@ def offset_parse(x): # заполнение последних двух столбцов таблицы position_names
 					component_des[key][2] = m # смещение
 			m += 1
 		component_des[key][3] = i # количество
+
+		print component_des[key]
+		print "------------ вставь сюда код для поиска неизвестных типов элементов"
+	quit()
 	return x
 #}}}
 
@@ -422,27 +427,37 @@ def pe3(): # создание таблицы для перечня элементов{{{
 		# Возможно понадобится что-то вроде \scalebox{0.8}[1]{R133\dots R145} или \resizebox
 
 		if len(tmp_tab) > 0:
+
+			def scale(str):
+				str = '\scalebox{0.75}[1]{' + str + '}'
+				return str
+
 			m = 0
 			while m < len(tmp_tab):
 				sum = 0
 				if m == 0: # если мы в первом ряду
 					sum = int(tmp_tab['RefDesNum'][m])
 					if sum > 2:
-						refdes = str(key) + '1' + '\mbox{.\kern -0.3mm .\kern -0.3mm .}' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = key + '1' + '...' + key + str(tmp_tab['RefDesNum'][m])
+						refdes = scale(refdes)
 					if sum == 2:
-						refdes = str(key) + '1' + ', ' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = key + '1' + ', ' + key + str(tmp_tab['RefDesNum'][m])
+						refdes = scale(refdes)
 					if sum == 1:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = key + str(tmp_tab['RefDesNum'][m])
+						#refdes = scale(refdes)
 
 				else:
 					sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1])
 					if sum > 2:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + '\mbox{.\kern -0.3mm .\kern -0.3mm .}' \
-								+ str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = key + str(tmp_tab['RefDesNum'][m-1]+1) + '...' + key + str(tmp_tab['RefDesNum'][m])
+						refdes = scale(refdes)
 					if sum == 2:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m-1] + 1) + ', ' + str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = key + str(tmp_tab['RefDesNum'][m-1]+1) + ', ' + key + str(tmp_tab['RefDesNum'][m])
+						refdes = scale(refdes)
 					if sum == 1:
-						refdes = str(key) + str(tmp_tab['RefDesNum'][m])
+						refdes = key + str(tmp_tab['RefDesNum'][m])
+						#refdes = scale(refdes)
 
 				# if we have more then one item in first line
 				if sum > 0:
