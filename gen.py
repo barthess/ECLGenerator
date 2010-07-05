@@ -17,9 +17,8 @@ import sys
 # preparing some data structures {{{
 
 # log file{{{
-logfile = open(error.log,'w')
+logfile = open('error.log','w')
 #}}}
-
 
 # Некоторые константы {{{
 # ширина фейковых полей для поддержания ширины колонок
@@ -306,12 +305,18 @@ def prepare(x): # cleaning table {{{
 	deleted = False
 	while m < len(x):
 		if x['RefDes'][m] == '':
+
+			log_msg = 'deleted: '
+			for i in column_names:
+				log_msg += str(x[i][m])
+			logfile.write(log_msg + '\n')
+
 			x = deleterow(x,m)
 			deleted = True
 			m -= 1
 		m += 1
 	if deleted:
-		print '*** Some elements deleted, because they have no RefDes'
+		print '*** Some elements deleted, because they have no RefDes (see:',logfile.name,')'
 	#}}}
 
 	# remove wrong columns{{{
@@ -374,7 +379,7 @@ def prepare(x): # cleaning table {{{
 		m+=1
 	#}}}
 
-	# screaning latex special symbols
+	# screaning latex special symbols{{{
 	x.replace('\\','\\textbackslash', strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
 	x.replace('%','\%',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
 	x.replace('_','\_',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
