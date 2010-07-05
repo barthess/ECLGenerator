@@ -2,7 +2,7 @@
 # -*- coding: cp1251 -*-
 
 # TODO
-# скрипт не умеет определять наличие неизвестных типов элементов
+# move screaning latex special symbols to the file reading section
 
 
 import string
