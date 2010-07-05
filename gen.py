@@ -360,9 +360,22 @@ def prepare(x): # cleaning table {{{
 	#}}}
 
 	# cleaning data{{{
+
 	x.replace('<< ','<<',strict=False,cols='Addit')
 	x.replace(' >>','>>',strict=False,cols='Addit')
-	x.replace('%',"\%",strict=False,cols=('Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'))
+
+	# screaning latex special symbols
+	x.replace('%','\%',strict=False)
+	x.replace('_','\_',strict=False)
+	x.replace('#','\#',strict=False)
+	x.replace('^','\^',strict=False)
+	x.replace('~','\~',strict=False)
+	x.replace('{','\{',strict=False)
+	x.replace('}','\}',strict=False)
+	x.replace('$','\$',strict=False)
+	x.replace('&','\&',strict=False)
+	x.replace('\\','\\textbackslash',strict=False)
+
 	#}}}
 	return x
 
