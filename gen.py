@@ -15,6 +15,11 @@ import argparse
 
 # preparing some data structures {{{
 
+# Некоторые константы {{{
+# ширина фейковых полей для поддержания ширины колонок
+column_strut = ' ' * 1024 
+#}}}
+
 # дефолтный список колонок {{{
 # данный список содержит правильные названия колонок, как их генерит P-CAD
 # они должны идти в том порядке, как должны появляться перечне
@@ -200,63 +205,71 @@ for line in raw_input:
 		#line = re.sub('^"','',line)
 		#line = re.sub('"\r\n','\r\n',line) 
 		out.write(line)
-
-# из-за недоработок колонки не могут расширяться динамически
-# поэтому на придется заранее вставить в конец файла поля заведомо
-# бОльшей шириы
-m = 0
-i = 1
-tmp_str = ' '*200 # предположительно 200 символов должно хватить на всё
-tmp_str += '&'
-tmp_str_out = ''
-while m < len(raw_input[0]):
-	if raw_input[0][m] == '&':
-		tmp_str_out += tmp_str
-	m += 1
-tmp_str_out += ' '*200
-out.write(tmp_str_out)
-
-# закроем файл
 out.close()
-
-# Ранее мы вставили в файл строку большой ширины в качестве распорки.
-# Теперь ее надо удалить.
-
-# reading file into array 
-x = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '&',headerlines=1)
-x = x[:-1] # remove last line
-tmp_tab = x # create temporal array
-os.remove("cleaned_output.tmp") # remove temporal file
 
 #}}}
 
 
+def column_wide(narrow_tab): # функция для расширения столбцов {{{
+# из-за недоработок колонки не могут расширяться динамически
+# поэтому на придется заранее вставить в конец файла поля заведомо
+# бОльшей ширины
+# принимает обычную таблицу, возвращает "раздутую"
 
-def deleterow(x,m):
+	# crate fake row
+	first_row = narrow_tab[:1] # возьмем первый ряд для определения типа колонок
+	empty_tuple = ()
 
-	fake_row = x[:1]
-	for i in fake_row.dtype.names:
-		fake_row[i][0] = ' '*200
+	for i in first_row.dtype.names:
+		if (type(first_row[i][0]).__name__) == 'string_':
+			empty_tuple += (column_strut,)
+		else:
+			empty_tuple +=('',)
+
+	wide_row = tb.tabarray(records=(empty_tuple,), names=list(first_row.dtype.names))
+
+	# now we have table from one empty wide row
+	# stack them to input table
+	wide_tab = narrow_tab.rowstack([wide_row])
+
+	# for now wide row is unnecessary 
+	wide_tab = wide_tab[:-1]
+
+	return wide_tab
+#}}}
 
 
+
+
+
+def deleterow(input_tab,m): # функция удаления рядов из указанной таблицы указанный ряд {{{
 
 	if m == 0:
-		return x[1:]
-	elif m == len(x):
-		return x[:-1]
+		return input_tab[1:]
+	elif m == len(tmp_tab):
+		return input_tab[:-1]
+	else:
+		aa = input_tab[:m]
+		bb = input_tab[(m+1):]
 
-	tmp_tab1 = x[:(m-1)]
-	tmp_tab2 = x[m:]
+	aa = aa.rowstack(bb)
+	aa = column_wide(aa)
+
+	return aa
+#}}}
 
 
-	tmp_tab1 = tmp_tab1.rowstack(tmp_tab2)
-	tmp_tab1 = tmp_tab1[:-1]
 
-	return tmp_tab1
 
-x = deleterow(x,3)
-print x
-quit()
+# reading file into array {{{
+x = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '&',headerlines=1)
+x = column_wide(x)
+tmp_tab = x # create temporal array
+os.remove("cleaned_output.tmp") # remove temporal file
+#}}}
+
+
+
 
 def prepare(x): # cleaning table {{{
 
@@ -278,6 +291,13 @@ def prepare(x): # cleaning table {{{
 	x = tmp_tab
 	#}}}
 
+	# remove rows with empty RefDes{{{
+
+
+
+
+
+	#}}}
 
 	# remove wrong columns{{{
 	m = 0 
@@ -294,7 +314,6 @@ def prepare(x): # cleaning table {{{
 		flag = 0
 	#}}}
 
-
 	# create empty column{{{
 	empty_col = []
 	m = 0
@@ -302,7 +321,6 @@ def prepare(x): # cleaning table {{{
 		empty_col.append('')
 		m+=1
 	#}}}
-
 
 	# add empty columns if needed {{{
 	col_names = x.dtype.names
@@ -323,7 +341,6 @@ def prepare(x): # cleaning table {{{
 
 #}}}
 
-
 	# stack columns 1 by 1 in right order{{{
 	tmp_tab = x[['RefDes']] # save to tmp_tab first column
 	m = 1
@@ -334,7 +351,6 @@ def prepare(x): # cleaning table {{{
 	x = z # now x contain columns in right order 
 	#}}}
 
-
 	# add russian LaTeX quotas to column 'Addit'{{{
 	m = 0
 	while m < len(x):
@@ -342,7 +358,6 @@ def prepare(x): # cleaning table {{{
 			x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
 		m+=1
 	#}}}
-
 
 	# cleaning data{{{
 	x.replace('<< ','<<',strict=False,cols='Addit')
@@ -525,7 +540,7 @@ def pe3(): # создание таблицы для перечня элементов{{{
 		if len(tmp_tab) > 0:
 			if len(tmp_tab) > 1: # у нас больше 1 наименования компонентов
 				# шапка и хвост для блока из одного типа элементов
-				title = '\centering\underline{'+component_des[key][1] + '}'
+				title = '\centering{'+component_des[key][1] + '}'
 				head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
 				
 				# соберем в кучу шапку, тело и хвост
