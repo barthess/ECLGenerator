@@ -94,6 +94,56 @@ bill_epilog = '''
 #}}}
 
 
+def column_wide(narrow_tab): # функци€ дл€ расширени€ столбцов {{{
+# из-за недоработок колонки не могут расшир€тьс€ динамически
+# поэтому на придетс€ заранее вставить в конец файла пол€ заведомо
+# бќльшей ширины
+# принимает обычную таблицу, возвращает "раздутую"
+
+	# crate fake row
+	first_row = narrow_tab[:1] # возьмем первый р€д дл€ определени€ типа колонок
+	empty_tuple = ()
+
+	for i in first_row.dtype.names:
+		if (type(first_row[i][0]).__name__) == 'string_':
+			empty_tuple += (column_strut,)
+		else:
+			empty_tuple +=('',)
+
+	wide_row = tb.tabarray(records=(empty_tuple,), names=list(first_row.dtype.names))
+
+	# now we have table from one empty wide row
+	# stack them to input table
+	wide_tab = narrow_tab.rowstack([wide_row])
+
+	# for now wide row is unnecessary 
+	wide_tab = wide_tab[:-1]
+
+	return wide_tab
+#}}}
+
+
+def deleterow(input_tab,m): # функци€ удалени€ р€дов из таблицы {{{
+
+	if m == 0:
+		return input_tab[1:]
+	elif m == len(tmp_tab):
+		return input_tab[:-1]
+	else:
+		aa = input_tab[:m]
+		bb = input_tab[(m+1):]
+
+	aa = aa.rowstack(bb)
+	aa = column_wide(aa)
+
+	return aa
+#}}}
+
+
+
+
+
+
 # command line parser{{{
 parser = argparse.ArgumentParser(
 		formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -197,67 +247,26 @@ out = open('cleaned_output.tmp','w')
 out = open('cleaned_output.tmp','r+')
 
 # delete empty lines and redundant quotes
-for line in raw_input:
+for line in (raw_input):
 	# использование в регул€рках '$' почему-то не прокатывает
 	if re.search('^[	]*\r\n', line) == None: # if string non empty
-		line = re.sub('"','',line)
+		line = re.sub('"','',line) # delete all quotes
+		line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
 		#line = re.sub('"&"','&',line)
 		#line = re.sub('^"','',line)
 		#line = re.sub('"\r\n','\r\n',line) 
 		out.write(line)
+
+# Hack! This line tell tabarray, that all columns contain string values
+# Don't forget to remove it after loading file
+last_line = re.sub('[^&]',' ',raw_input[0])
+out.write(last_line)
+
 out.close()
 
-#}}}
-
-
-def column_wide(narrow_tab): # функци€ дл€ расширени€ столбцов {{{
-# из-за недоработок колонки не могут расшир€тьс€ динамически
-# поэтому на придетс€ заранее вставить в конец файла пол€ заведомо
-# бќльшей ширины
-# принимает обычную таблицу, возвращает "раздутую"
-
-	# crate fake row
-	first_row = narrow_tab[:1] # возьмем первый р€д дл€ определени€ типа колонок
-	empty_tuple = ()
-
-	for i in first_row.dtype.names:
-		if (type(first_row[i][0]).__name__) == 'string_':
-			empty_tuple += (column_strut,)
-		else:
-			empty_tuple +=('',)
-
-	wide_row = tb.tabarray(records=(empty_tuple,), names=list(first_row.dtype.names))
-
-	# now we have table from one empty wide row
-	# stack them to input table
-	wide_tab = narrow_tab.rowstack([wide_row])
-
-	# for now wide row is unnecessary 
-	wide_tab = wide_tab[:-1]
-
-	return wide_tab
-#}}}
-
-
-def deleterow(input_tab,m): # функци€ удалени€ р€дов из таблицы {{{
-
-	if m == 0:
-		return input_tab[1:]
-	elif m == len(tmp_tab):
-		return input_tab[:-1]
-	else:
-		aa = input_tab[:m]
-		bb = input_tab[(m+1):]
-
-	aa = aa.rowstack(bb)
-	aa = column_wide(aa)
-
-	return aa
-#}}}
-
-
-# reading file into array {{{
+# reading file into array 
 x = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '&',headerlines=1)
+x = x[:-1] # remove hacked line
 x = column_wide(x)
 tmp_tab = x # create temporal array
 os.remove("cleaned_output.tmp") # remove temporal file
@@ -354,29 +363,25 @@ def prepare(x): # cleaning table {{{
 	# add russian LaTeX quotas to column 'Addit'{{{
 	m = 0
 	while m < len(x):
-		if re.search('^[	]*$', x['Addit'][m]) == None:
+		if re.search('^[	]*$', x['Addit'][m]) == None: # если поле Ќ≈ пустое
 			x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
 		m+=1
 	#}}}
 
-	# cleaning data{{{
-
-	x.replace('<< ','<<',strict=False,cols='Addit')
-	x.replace(' >>','>>',strict=False,cols='Addit')
-
 	# screaning latex special symbols
-	x.replace('%','\%',strict=False)
-	x.replace('_','\_',strict=False)
-	x.replace('#','\#',strict=False)
-	x.replace('^','\^',strict=False)
-	x.replace('~','\~',strict=False)
-	x.replace('{','\{',strict=False)
-	x.replace('}','\}',strict=False)
-	x.replace('$','\$',strict=False)
-	x.replace('&','\&',strict=False)
-	x.replace('\\','\\textbackslash',strict=False)
+	x.replace('\\','\\textbackslash', strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('%','\%',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('_','\_',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('#','\#',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('^','\^',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('~','\~',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('{','\{',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('}','\}',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('$','\$',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	x.replace('&','\&',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
 
 	#}}}
+
 	return x
 
 #}}}
