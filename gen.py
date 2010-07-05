@@ -239,10 +239,7 @@ def column_wide(narrow_tab): # функция для расширения столбцов {{{
 #}}}
 
 
-
-
-
-def deleterow(input_tab,m): # функция удаления рядов из указанной таблицы указанный ряд {{{
+def deleterow(input_tab,m): # функция удаления рядов из таблицы {{{
 
 	if m == 0:
 		return input_tab[1:]
@@ -257,8 +254,6 @@ def deleterow(input_tab,m): # функция удаления рядов из указанной таблицы указан
 
 	return aa
 #}}}
-
-
 
 
 # reading file into array {{{
@@ -292,11 +287,16 @@ def prepare(x): # cleaning table {{{
 	#}}}
 
 	# remove rows with empty RefDes{{{
-
-
-
-
-
+	m = 0
+	deleted = False
+	while m < len(x):
+		if x['RefDes'][m] == '':
+			x = deleterow(x,m)
+			deleted = True
+			m -= 1
+		m += 1
+	if deleted:
+		print '*** Some elements deleted, because they have no RefDes'
 	#}}}
 
 	# remove wrong columns{{{
