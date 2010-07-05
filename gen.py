@@ -232,8 +232,14 @@ os.remove("cleaned_output.tmp") # remove temporal file
 
 
 
+def deleterow(x,m):
+	tmp_tab1 = x[:(m-1)]
+	tmp_tab2 = x[(m+1):]
+	return tmp_tab1.rowstack(tmp_tab2)
 
 
+print deleterow(x,3)
+quit()
 
 def prepare(x): # cleaning table {{{
 
