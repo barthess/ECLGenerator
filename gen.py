@@ -233,12 +233,29 @@ os.remove("cleaned_output.tmp") # remove temporal file
 
 
 def deleterow(x,m):
+
+	fake_row = x[:1]
+	for i in fake_row.dtype.names:
+		fake_row[i][0] = ' '*200
+
+
+
+	if m == 0:
+		return x[1:]
+	elif m == len(x):
+		return x[:-1]
+
 	tmp_tab1 = x[:(m-1)]
-	tmp_tab2 = x[(m+1):]
-	return tmp_tab1.rowstack(tmp_tab2)
+	tmp_tab2 = x[m:]
 
 
-print deleterow(x,3)
+	tmp_tab1 = tmp_tab1.rowstack(tmp_tab2)
+	tmp_tab1 = tmp_tab1[:-1]
+
+	return tmp_tab1
+
+x = deleterow(x,3)
+print x
 quit()
 
 def prepare(x): # cleaning table {{{
