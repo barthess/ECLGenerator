@@ -11,9 +11,15 @@ import os
 import tabular as tb
 from operator import itemgetter # for sort() and sorted()
 import argparse
+import sys
 
 
 # preparing some data structures {{{
+
+# log file{{{
+logfile = open(error.log,'w')
+#}}}
+
 
 # Некоторые константы {{{
 # ширина фейковых полей для поддержания ширины колонок
