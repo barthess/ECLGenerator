@@ -343,9 +343,24 @@ def offset_parse(x): # заполнение последних двух столбцов таблицы position_names
 			m += 1
 		component_des[key][3] = i # количество
 
-		print component_des[key]
-		print "------------ вставь сюда код для поиска неизвестных типов элементов"
-	quit()
+	#searching for unknown types of element
+	m = 0
+	fail = False
+	for refdes in x['RefDes']:
+		known = False
+		for key in pos_names:
+			if refdes == key:
+				known = True
+		if not known:
+			fail = True
+			print '!!! Unknown element type:', x['RefDes'][m] + str(x['RefDesNum'][m])
+		m += 1
+	if fail:
+		print '\nДальнейшая работа невозможна из-за наличия элементов неизвестного типа.'
+		print 'Возможные причины: опечатка в RefDes при создании элемента для P-CAD,'
+		print '                   либо, это - новый элемент, отсутствующий в базе.'
+		print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
+		quit()
 	return x
 #}}}
 
@@ -424,8 +439,6 @@ def pe3(): # создание таблицы для перечня элементов{{{
 		#}}}
 
 		# обновление поля RefDes {{{
-		# Возможно понадобится что-то вроде \scalebox{0.8}[1]{R133\dots R145} или \resizebox
-
 		if len(tmp_tab) > 0:
 
 			def scale(str):
@@ -465,48 +478,49 @@ def pe3(): # создание таблицы для перечня элементов{{{
 					tmp_tab['Sum'][m] = sum
 				m += 1
 		#}}}
-		
-		tmp_tab = tmp_tab.deletecols('RefDesNum') # remove unneeded column
+		tmp_tab = tmp_tab.deletecols(['RefDesNum']) # remove unneeded column
 
 		# add LaTeX new line symbol {{{
-		m = 0
-		last_col = tmp_tab.dtype.names[-1:][0]
-		while m < len(tmp_tab):
-			# may be better '\tabularnewline'?
-			tmp_tab[last_col][m] = tmp_tab[last_col][m] + '\\\\'
-			m += 1
-		# first and last must be ends by non breakable symbols
-		tmp_tab[last_col][0] = tmp_tab[last_col][0] + '*'
-		if len(tmp_tab) > 1:
-			tmp_tab[last_col][-1:] = tmp_tab[last_col][-1:][0] + '*'
-		if len(tmp_tab) > 2:
-			tmp_tab[last_col][-2:-1] = tmp_tab[last_col][-2:-1][0] + '*'
+		if len(tmp_tab) > 0:
+			m = 0
+			last_col = tmp_tab.dtype.names[-1:][0]
+			while m < len(tmp_tab):
+				# may be better '\tabularnewline'?
+				tmp_tab[last_col][m] = tmp_tab[last_col][m] + '\\\\'
+				m += 1
+			# first and last must be ends by non breakable symbols
+			tmp_tab[last_col][0] = tmp_tab[last_col][0] + '*'
+			if len(tmp_tab) > 1:
+				tmp_tab[last_col][-1:] = tmp_tab[last_col][-1:][0] + '*'
+			if len(tmp_tab) > 2:
+				tmp_tab[last_col][-2:-1] = tmp_tab[last_col][-2:-1][0] + '*'
 		#}}}
 		
 		# Вставка типа компонента в список и сборка в одну выходную таблицу {{{
 		foot = tb.tabarray(records=[('','','','\\\\*'),('','','','\\\\')], names=(tmp_tab.dtype.names))
+		
+		if len(tmp_tab) > 0:
+			if len(tmp_tab) > 1: # у нас больше 1 наименования компонентов
+				# шапка и хвост для блока из одного типа элементов
+				title = '\centering\underline{'+component_des[key][1] + '}'
+				head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
+				
+				# соберем в кучу шапку, тело и хвост
+				if firstrun:
+					pe3_out = head.rowstack([tmp_tab,foot])
+					firstrun = False
+				else:
+					pe3_out = pe3_out.rowstack([head,tmp_tab,foot])
 
-		if len(tmp_tab) > 1: # у нас больше 1 наименования компонентов
-			# шапка и хвост для блока из одного типа элементов
-			title = '\centering\underline{'+component_des[key][1] + '}'
-			head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
-			
-			# соберем в кучу шапку, тело и хвост
-			if firstrun:
-				pe3_out = head.rowstack([tmp_tab,foot])
-				firstrun = False
-			else:
-				pe3_out = pe3_out.rowstack([head,tmp_tab,foot])
+			else: # наименование только одно
+				# название вставляется прямо в строку
+				tmp_tab['Item'][0] = component_des[key][0] + ' ' + tmp_tab['Item'][0]
 
-		else: # наименование только одно
-			# название вставляется прямо в строку
-			tmp_tab['Item'][0] = component_des[key][0] + ' ' + tmp_tab['Item'][0]
-
-			if firstrun:
-				pe3_out = tmp_tab.rowstack([foot])
-				firstrun = False
-			else:
-				pe3_out = pe3_out.rowstack([tmp_tab,foot])
+				if firstrun:
+					pe3_out = tmp_tab.rowstack([foot])
+					firstrun = False
+				else:
+					pe3_out = pe3_out.rowstack([tmp_tab,foot])
 		#}}}
 
 	# запись полученной таблицы на диск
