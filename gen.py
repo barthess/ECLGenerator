@@ -265,7 +265,6 @@ def prepare(x): # cleaning table {{{
 	#}}}
 
 	return x
-
 #}}}
 
 
@@ -550,8 +549,6 @@ Process generated list by this script.
 '''))#}}}
 
 
-
-
 parser.add_argument('input_file', # {{{
 		metavar='/path/to/file',
 		type=file, 
@@ -562,33 +559,22 @@ parser.add_argument('-d','--delimiter', #{{{
 		type=str,
 		help='column separator in input file (default: %(default)s)')
 		#}}}
-parser.add_argument('-c','--columns',#{{{
-		nargs='*', 
-		metavar=('str'),
-		type=str,
-		help='space separated column names in right order \n (default: %(default)s)',
-		default=column_names)
+#parser.add_argument('-c','--columns',#{{{
+#		nargs='*', 
+#		metavar=('str'),
+#		type=str,
+#		help='space separated column names in right order \n (default: %(default)s)',
+#		default=column_names)
+#		#}}}
+parser.add_argument('-p','--preamble',#{{{
+		action='store_true',
+		help='wrap table in default preamble',
+		default=False)
 		#}}}
-parser.add_argument('-p','--pe3_preamble',#{{{
-		nargs=2,
-		type=str,
-		metavar=('preamble.tex','epilog.tex'),
-		help='LaTeX preamble to the component list (default: %(default)s)',
-		default=['./pe3_preamble.tex','./pe3_epilog.tex'])
-		#}}}
-parser.add_argument('-s','--spec_preamble', #{{{
-		nargs=2,
-		type=str,
-		metavar=('preamble.tex','epilog.tex'),
-		help='LaTeX preamble to the specification (default: %(default)s)',
-		default=['./spec_preamble.tex','./spec_epilog.tex'])
-		#}}}
-parser.add_argument('-b','--bill_preamble',#{{{
-		nargs=2,
-		type=str,
-		metavar=('preamble.tex','epilog.tex'),
-		help='LaTeX preamble to the bill of material list (default: %(default)s)',
-		default=['./bill_preamble.tex','./bill_epilog.tex'])
+parser.add_argument('-t','--texify',#{{{
+		action='store_true',
+		help='texify document, need -p option',
+		default=False)
 		#}}}
 
 
@@ -629,7 +615,6 @@ for line in (raw_input):
 # Don't forget to remove it after loading file
 last_line = re.sub('[^&]',' ',raw_input[0])
 out.write(last_line)
-
 out.close()
 
 # reading file into array 
