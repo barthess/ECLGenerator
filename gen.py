@@ -3,7 +3,7 @@
 
 # TODO
 # move screaning latex special symbols to the file reading section
-
+# номиналы отбивать короткими пробелами от наименования физ. величины
 
 import string
 import re
