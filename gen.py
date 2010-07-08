@@ -2,9 +2,10 @@
 # -*- coding: cp1251 -*-
 
 # TODO
-# move screaning latex special symbols to the file reading section
 # номиналы отбивать короткими пробелами от наименования физ. величины
-# Сжимать позиционные обозначения, только если одно из них перевалило за 10
+# Сжимать позиционные обозначения по горизонтали, только если одно из них перевалило за 10
+# Переименовать offset_parse() более адекватно
+# вставить обработку исключений при подгрузке питоновых модулей, подсказывать, чего не хватает
 
 import string
 import re
@@ -228,17 +229,8 @@ def prepare(x): # cleaning table {{{
 	#}}}
 
 	# screaning latex special symbols{{{
-	x.replace('\\','\\textbackslash', strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('%','\%',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('_','\_',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('#','\#',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('^','\^',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('~','\~',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('{','\{',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('}','\}',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	x.replace('$','\$',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+	# this was moved here because & is input delimeter
 	x.replace('&','\&',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-
 	#}}}
 
 	return x
@@ -246,11 +238,12 @@ def prepare(x): # cleaning table {{{
 
 
 def offset_parse(x): # заполнение последних двух столбцов таблицы position_names{{{
+	xlocal = x
 	for key in pos_names:
 		m = 0
 		i = 0
-		while m < len(x):
-			if x['RefDes'][m] == key:
+		while m < len(xlocal):
+			if xlocal['RefDes'][m] == key:
 				i += 1
 				if component_des[key][2] == -1:
 					component_des[key][2] = m # смещение
@@ -260,22 +253,23 @@ def offset_parse(x): # заполнение последних двух столбцов таблицы position_names
 	#searching for unknown types of element
 	m = 0
 	fail = False
-	for refdes in x['RefDes']:
+	for refdes in xlocal['RefDes']:
 		known = False
 		for key in pos_names:
 			if refdes == key:
 				known = True
 		if not known:
 			fail = True
-			print '!!! Unknown element type:', x['RefDes'][m] + str(x['RefDesNum'][m])
+			print '!!! Unknown element type:', xlocal['RefDes'][m] + str(xlocal['RefDesNum'][m])
 		m += 1
 	if fail:
 		print '\nДальнейшая работа невозможна из-за наличия элементов неизвестного типа.'
 		print 'Возможные причины: опечатка в RefDes при создании элемента для P-CAD,'
 		print '                   либо, это - новый элемент, отсутствующий в базе.'
 		print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
+		print 'и прогоните скрипт заново.'
 		quit()
-	return x
+	return xlocal
 #}}}
 
 
@@ -532,9 +526,15 @@ for line in (raw_input_file):
 	if re.search('^[	]*\r\n', line) == None: # if string non empty
 		line = re.sub('"','',line) # delete all quotes
 		line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
-		#line = re.sub('"&"','&',line)
-		#line = re.sub('^"','',line)
-		#line = re.sub('"\r\n','\r\n',line) 
+		line = re.sub('\\\\','\\\\textbackslash ',line)
+		line = re.sub('%','\%',line)
+		line = re.sub('_','\_',line)
+		line = re.sub('#','\#',line)
+		line = re.sub('\^','\^',line)
+		line = re.sub('~','\~',line)
+		line = re.sub('{','\{',line)
+		line = re.sub('}','\}',line)
+		line = re.sub('\$','\$',line)
 		out.write(line)
 
 # Hack! This line tell tabarray, that all columns contain string values
