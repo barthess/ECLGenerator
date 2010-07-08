@@ -269,7 +269,7 @@ def offset_parse(x): # заполнение последних двух столбцов таблицы position_names
 		print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
 		print 'и прогоните скрипт заново.'
 		quit()
-	return xlocal
+	#return xlocal
 #}}}
 
 
@@ -562,7 +562,7 @@ x = prepare(x)
 
 
 # анализ главного массива
-x = offset_parse(x)
+offset_parse(x)
 
 
 
