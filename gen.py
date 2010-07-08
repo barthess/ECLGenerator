@@ -1,10 +1,16 @@
 #!/usr/bin/python
 # -*- coding: cp1251 -*-
 
-# TODO
-# номиналы отбивать короткими пробелами от наименовани€ физ. величины
+# TODO:
+
+# номиналы отбивать короткими пробелами от наименовани€ физ. величины, возможно переводить uF в мк‘
+# вставить компил€цию регул€рок в функцию фильтрации
+
+# ѕри задании номинала конденсатора в P-CAD писать в следующем пор€дке: вольтаж, емкость, процентность
+# использовать исключительно латиницу: uF, V
+
 # —жимать позиционные обозначени€ по горизонтали, только если одно из них перевалило за 10
-# ѕереименовать offset_parse() более адекватно
+
 # вставить обработку исключений при подгрузке питоновых модулей, подсказывать, чего не хватает
 
 import string
@@ -123,6 +129,48 @@ def save_to_file(filename,array): #{{{
 
 	os.remove('table.tmp')
 #}}}
+
+
+
+def process_value(s, type): # принимает строку и тип элемента, напр. C, L, R
+
+	def voltage(s):
+		s = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([umnpkM]?)([vV])',' \\1\\2\\3",\\5V ',s)
+		return s
+	def capacitance(s):
+		s = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([umnp]?)([Ff])',' \\1\\2\\3",\\5F ',s)
+		return s
+	def resistance(s):
+		s = re.sub('^([0-9]*)([.,]*)([0-9]*)([ ]*)([mkM]?[Ohm]?)',' \\1\\2\\3",\\5Ohm ',s)
+		return s
+	def	inductance(s):
+		pass
+		return s
+	def current(s):
+		pass
+		return s
+
+	if type == 'C':
+		s = voltage(s)
+		s = capacitance(s)
+	elif type == 'R':
+		s = resistance(s)
+
+	
+
+	# процентаж будет прогон€тьс€ дл€ всех желающих
+	# будем считать, что все знаки % уже заэкранированы
+	s = re.sub('[ ]*([0-9]*)([.,]*)([0-9]*)([ ]*)(\\\\%)','",\\\\textpm",\\1\\2\\3",\\5',s)
+
+	# тут же можно поудал€ть все пробелы вокруг символов ",
+	s = re.sub('[ ]*",[ ]*','",',s)
+	s = re.sub('^[ ]*|[ ]*$','',s)
+	s = re.sub('[ ]+',' ',s)
+	# а так же случайно попавшие двойные последовательности вроде ",",
+	return s
+
+
+	# ., (заменить все точки на зап€тые, и добавить ведущий ноль, если надо)
 
 
 
@@ -272,15 +320,35 @@ def indexing(x): # заполнение последних двух столбцов таблицы position_names{{{
 #}}}
 
 
+def mboxing(array, *columns): #заключение нужных €чеек в \mbox{} {{{
+	m = 0
+	i = ''
+	while m < len(array):
+		for i in (columns):
+			if not re.match('^[	]*$', array[i][m]):
+				array[i][m] = '\mbox{' + array[i][m] + '}'
+		m += 1
+	return(array)
+#}}}
+
+
 def pe3(x): # создание таблицы дл€ перечн€ элементов{{{
 	pe3_in = x 
 	firstrun = True
 
+	# process Value column
+	m = 0 
+	while m < len(pe3_in):
+		pe3_in['Value'][m] = process_value(pe3_in['Value'][m], pe3_in['RefDes'][m])
+		m += 1
+
+	# enclose in mbox
+	pe3_in = mboxing(pe3_in,'Title','Type','SType','Value','Docum','Addit','Note')
+
 	# merge columns
 	m = 0 
 	while m < len(pe3_in):
-		pe3_in['Title'][m] = pe3_in['Type'][m] + \
-				pe3_in['SType'][m] + ' ' + \
+		pe3_in['Title'][m] = pe3_in['Type'][m] + pe3_in['SType'][m] + ' ' + \
 				pe3_in['Value'][m] + ' ' + \
 				pe3_in['Docum'][m] + ' ' + \
 				pe3_in['Addit'][m]
@@ -559,17 +627,11 @@ os.remove("cleaned_output.tmp") # remove temporal file
 # now x contain final data. DO NOT touch them anymore!
 x = prepare(x)
 
-
 # анализ главного массива
 indexing(x)
 
-
-
 # build component list PE3
 pe3_array = pe3(x)
-
-
-
 
 # save table to file
 save_to_file(args.pe3, pe3_array)
