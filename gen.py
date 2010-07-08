@@ -237,7 +237,7 @@ def prepare(x): # cleaning table {{{
 #}}}
 
 
-def offset_parse(x): # заполнение последних двух столбцов таблицы position_names{{{
+def indexing(x): # заполнение последних двух столбцов таблицы position_names{{{
 	xlocal = x
 	for key in pos_names:
 		m = 0
@@ -269,7 +269,6 @@ def offset_parse(x): # заполнение последних двух столбцов таблицы position_names
 		print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
 		print 'и прогоните скрипт заново.'
 		quit()
-	#return xlocal
 #}}}
 
 
@@ -562,7 +561,7 @@ x = prepare(x)
 
 
 # анализ главного массива
-offset_parse(x)
+indexing(x)
 
 
 
