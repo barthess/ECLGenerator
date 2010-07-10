@@ -135,35 +135,17 @@ def save_to_file(filename,array): #{{{
 
 
 
-def process_value(s, type): # принимает строку и тип элемента, напр. C, L, R {{{
+def process_value(s, refdes): # принимает строку и тип элемента, напр. C, L, R {{{
 
-    #выделить все знакомые строки re.findall
-    #потом их все поудалять (re.sub), остаток записать в конец
-    # в выделенныех знакомых отделить цифры от букв
+    # FIXME: сопротивление можно обозначать \textohm
 
-    # сопротивление можно обозначать \textohm
-
-    tolerance = re.compile('[0-9]*[.,]*[0-9]*[ ]*\\\\%')
-    voltage = re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[vV]')
-    capacitance = re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?[Ff]')
-
-    resistance_re = re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[Ohm]')
-
-    #def voltage(s):
-    #   s = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([umnpkM]?)([vV])',' \\1\\2\\3",\\5V ',s)
-    #   return s
-    #def capacitance(s):
-    #   s = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([umnp]?)([Ff])',' \\1\\2\\3",\\5F ',s)
-    #   return s
-    def resistance(s):
-        s = re.sub('^([0-9]*)([.,]*)([0-9]*)([ ]*)([mkM]?[Ohm]?)',' \\1\\2\\3",\\5Ohm ',s)
-        return s
-    def inductance(s):
-        pass
-        return s
-    def current(s):
-        pass
-        return s
+    # регулярные выражения для поиска номиналов:
+    tolerance =     re.compile('[0-9]*[.,]*[0-9]*[ ]*\\\\%')
+    voltage =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[vV]')
+    capacitance =   re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?[Ff]')
+    resistance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?Ohm')
+    inductance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[unm]?[Hh]')
+    current =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[m]?[Aa]')
 
 
     # принимает:    строку, которую надо обработать
@@ -171,36 +153,45 @@ def process_value(s, type): # принимает строку и тип элемента, напр. C, L, R {{{
     # возвращает:   обработанную входную строку
     def clean(oldstring, *args): #{{{
         newstring = ''
+	s1 = ''
         for regexp in (args):
             t1 = regexp.findall(oldstring)
             if len(t1) > 0:
                 # вставим нужные отбивки
                 s1 = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([a-zA-Z\\\\%]*)','\\1\\2\\3",\\5',t1[0])
-                #     вставить ведущий ноль
-
-                #   заменить точку на запятую
-
-
-                # перевести на русский
-
-
+                # заменить точку на запятую
+                s1 = re.sub('([0-9]*)[.,]([0-9]*",)','\\1,\\2',s1)
+                # вставить ведущий ноль
+                s1 = re.sub('^,','0,',s1)
+                # FIXME: тут уместно будет перевести на русский
                 newstring += (s1 + ' ')
-        # теперь newstring содержит все нужные нам подстроки в нужном порядке
-        # надо удалить их из исходной строки и остатки прилепить в конце
-        print newstring
+            # теперь newstring содержит все нужные нам подстроки в нужном порядке
+            # надо удалить их из исходной строки
+            oldstring = regexp.sub('',oldstring)
+        # остатки старой строки прилепить в конец новой
+        newstring = newstring + oldstring
+	# снабдим процентаж знаком плюс-минус (\textpm)
+        #print '-',newstring
+	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}\\1',newstring)
+        #print '+',newstring
+        # вычистим из конца пробелы, которые остались от старой строки
+        newstring = re.sub('[	]*$','',newstring)
+	return newstring
     #}}}
 
-    if type == 'C':
-        clean(s, voltage, capacitance, tolerance)
-
-    elif type == 'R':
-        s = resistance(s)
-
-
-
-    # процентаж будет прогоняться для всех желающих
-    # будем считать, что все знаки % уже заэкранированы
-    s = re.sub('[ ]*([0-9]*)([.,]*)([0-9]*)([ ]*)(\\\\%)','",\\\\textpm",\\1\\2\\3",\\5',s)
+    if refdes == 'C':
+        s = clean(s, voltage, capacitance, tolerance)
+    elif refdes == 'R':
+        s = clean(s, resistance, tolerance)
+    else: # обработчик лажи
+        unknown_element = True
+        for i in pos_names:
+            if refdes == i:
+                unknown_element = False
+        if unknown_element:
+            # аварийное завершение, скрипт не знает такого элемента
+            print 'Something goes wrong. I don\'t know element type:',refdes
+            quit()
 
     # тут же можно поудалять лишних пробелов
     s = re.sub('[ ]*",[ ]*','",',s)
@@ -208,13 +199,8 @@ def process_value(s, type): # принимает строку и тип элемента, напр. C, L, R {{{
     s = re.sub('[ ]+',' ',s)
 
     # а так же случайно попавшие двойные последовательности вроде ",",
-    s = re.sub('[",]+','",',s)
-
+    s = re.sub('",+','",',s)
     return s
-
-
-    # ., (заменить все точки на запятые, и добавить ведущий ноль, если надо)
-
 #}}}
 
 
@@ -376,7 +362,7 @@ def mboxing(array, *columns): #заключение нужных ячеек в \mbox{} {{{
 
 
 def pe3(x): # создание таблицы для перечня элементов{{{
-    pe3_in = x 
+    pe3_in = x
     firstrun = True
 
     # process Value column
@@ -541,7 +527,6 @@ def pe3(x): # создание таблицы для перечня элементов{{{
                     pe3_out = pe3_out.rowstack([tmp_tab,foot])
         #}}}
 
-    # запись полученной таблицы на диск
     return pe3_out
 #}}}
 
