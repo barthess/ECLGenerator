@@ -46,16 +46,22 @@ column_num = len(column_names)
 # Как заполнять:
 # 'key' : ['ед. число','мн. число','смещение','количество']
 #
-# Смещение и количество по умолчанию равны -1, они будут заполняться автоматически
-# по мере анализа главной таблицы.
+# Смещение и количество по умолчанию равны -1, они будут заполняться
+# во время анализа главной таблицы.
 component_des = {   'C' : ['Конденсатор','Конденсаторы',-1,-1], \
+                    'E' : ['Перемычка','Перемычки',-1,-1], \
                     'R' : ['Резистор','Резисторы',-1,-1], \
                     'D' : ['Микросхема','Микросхемы',-1,-1], \
                     'DA': ['Микросхема','Микросхемы',-1,-1], \
                     'DD': ['Микросхема','Микросхемы',-1,-1], \
+                    'L' : ['Дроссель','Дроссели',-1,-1], \
+                    'RK': ['Терморезистор','Терморезисторы',-1,-1], \
+                    'RP': ['Резистор подстроечный','Резисторы подстроечные',-1,-1], \
                     'VD': ['Диод','Диоды',-1,-1], \
                     'XP': ['Вилка','Вилки',-1,-1], \
                     'XS': ['Розетка','Розетки',-1,-1], \
+                    'Z' : ['Фильтр радиочастотный','Фильтры радиочастотные',-1,-1], \
+                    'ZQ': ['Резонатор кварцевый','Резонаторы кварцевые',-1,-1], \
                     }
 # Отдельно посортируем, потому что питоновый словарь выбирает 
 # элементы в случайном порядке
@@ -167,11 +173,14 @@ def process_value(s, refdes): #{{{
 
     # регулярные выражения для поиска номиналов{{{
     tolerance =     re.compile('[0-9]*[.,]*[0-9]*[ ]*\\\\%')
-    voltage =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[vV]')
-    capacitance =   re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?[Ff]')
-    resistance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[Oo]hm')
-    inductance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[unm]?[Hh]')
-    current =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[m]?[Aa]')
+
+    capacitance =   re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?F')
+    current =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[num]?A')
+    frequency =     re.compile('[0-9]*[.,]*[0-9]*[ ]*[kMG]?Hz')
+    inductance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[unm]?H')
+    power =         re.compile('[0-9]*[.,]*[0-9]*[ ]*[umk]?W')
+    resistance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?Ohm')
+    voltage =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?V')
     #}}}
 
     def clean(oldstring, *args): # вспомогательная функция {{{ 
@@ -210,18 +219,23 @@ def process_value(s, refdes): #{{{
         #if re.search('[^     ]*',oldstring)
         newstring = newstring + oldstring
 	# снабдим процентаж знаком плюс-минус (\textpm)
-	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}\\1',newstring)
+	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}",\\1',newstring)
         # вычистим из конца пробелы, которые остались от старой строки
         newstring = re.sub('[	]*$','',newstring)
 	return newstring
     #}}}
 
     # логика выбора нужных регулярок в зависимости от типа элемента {{{
-    if refdes == 'C':
-        s = clean(s, voltage, capacitance, tolerance)
-    elif refdes == 'R':
-        s = clean(s, resistance, tolerance)
+    if refdes ==    'C':
+        s = clean(s, capacitance, tolerance, voltage)
+    elif refdes ==  'L':
+        s = clean(s, inductance, tolerance, current)
+    elif (refdes == 'R') | (refdes == 'RK') | (refdes == 'RP'):
+        s = clean(s, resistance, tolerance, power)
         # FIXME: сопротивление можно обозначать \textohm
+        #s = re.sub('Ohm','{\\\\textohm}',s)
+    elif refdes == 'ZQ':
+        s = clean(s, frequency, tolerance)
     else: # обработчик лажи
         unknown_element = True
         for i in pos_names:
@@ -677,8 +691,9 @@ out = open('cleaned_output.tmp','r+')
 
 # delete empty lines and redundant quotes
 for line in (raw_input_file):
-    # использование в регулярках '$' почему-то не прокатывает
-    if re.search('^[    ]*\r\n', line) == None: # if string non empty
+    # использование в регулярках '$' тут почему-то не прокатывает
+    # \r\n - виндовый конец строки, \n - юниксовый, так, на всякий случай
+    if re.search('^[    ]*\r\n|^[    ]*\n', line) == None: # if string non empty
         line = re.sub('"','',line) # delete all quotes
         line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
         # screaning latex special symbols
