@@ -3,15 +3,9 @@
 
 # TODO:
 
-# номиналы отбивать короткими пробелами от наименования физ. величины, возможно переводить uF в мкФ
-# вставить компиляцию регулярок в функцию фильтрации
-# добавить валидатор, который будет ругаться в лог на несуществующие физ. величины
-
-# единицы измерений писать строго обязательно: kOhm, MOhm, pF
-
+# единицы измерений при создании пикадовой схемы писать строго обязательно: kOhm, MOhm, pF
 # При задании номинала конденсатора в P-CAD писать в следующем порядке: вольтаж, емкость, процентность
 # использовать исключительно латиницу: uF, V
-# Сделать переставлялку значений
 
 # Сжимать позиционные обозначения по горизонтали, только если одно из них перевалило за 10
 
@@ -45,6 +39,10 @@ column_num = len(column_names)
 
 # словарь для поиска по готовому массиву {{{
 # 
+# Тут хранятся все известные нам элементы. Если попадется неизвестный -
+# скрипт прервет выполнение и предложит пользователю добавить сюда
+# неизвестный элемент
+#
 # Как заполнять:
 # 'key' : ['ед. число','мн. число','смещение','количество']
 #
@@ -59,18 +57,23 @@ component_des = {   'C' : ['Конденсатор','Конденсаторы',-1,-1], \
                     'XP': ['Вилка','Вилки',-1,-1], \
                     'XS': ['Розетка','Розетки',-1,-1], \
                     }
+# Отдельно посортируем, потому что питоновый словарь выбирает 
+# элементы в случайном порядке
 pos_names = sorted(component_des.keys())
 #}}}
 
 #}}}
 
 
-def column_wide(narrow_tab): # функция для расширения столбцов {{{
-# из-за недоработок колонки не могут расширяться динамически
-# поэтому на придется заранее вставить в конец файла поля заведомо
-# бОльшей ширины
-# принимает обычную таблицу, возвращает "раздутую"
+def column_wide(narrow_tab): #{{{
+    """ Функция для расширения столбцов
 
+    Принимает обычную таблицу, возвращает "раздутую"
+
+    Из-за недоработок класса tabular колонки не могут расширяться динамически,
+    поэтому на придется заранее вставить в конец файла поля заведомо
+    бОльшей ширины.
+    """
     # crate fake row
     first_row = narrow_tab[:1] # возьмем первый ряд для определения типа колонок
     empty_tuple = ()
@@ -87,15 +90,24 @@ def column_wide(narrow_tab): # функция для расширения столбцов {{{
     # stack them to input table
     wide_tab = narrow_tab.rowstack([wide_row])
 
-    # for now wide row is unnecessary 
+    # for now wide row is unnecessary
+    # remove them
     wide_tab = wide_tab[:-1]
 
     return wide_tab
 #}}}
 
 
-def deleterow(input_tab,m): # функция удаления рядов из таблицы {{{
+def deleterow(input_tab, m): #{{{
+    """ Функция удаления рядов из таблицы.
 
+    Принимает входную таблицу и номер ряда, который надо удалить.
+
+    Возвращает таблицу без указанного ряда.
+
+    Удалить напрямую нельзя, зато можно откусить 2 куска,
+    а потом склеить их вместе.
+    """
     if m == 0:
         return input_tab[1:]
     elif m == len(tmp_tab):
@@ -105,15 +117,25 @@ def deleterow(input_tab,m): # функция удаления рядов из таблицы {{{
         bb = input_tab[(m+1):]
 
     aa = aa.rowstack(bb)
-    aa = column_wide(aa)
+    aa = column_wide(aa) # раздуем таблицу
 
     return aa
 #}}}
 
 
-def save_to_file(filename,array): #{{{
+def save_to_file(filename, array): #{{{
+    """ Функция сохранения таблицы в файл.
+
+    Принимает имя выходного файла и таблицу, которую надо сохранить
+
+    Не возвращает ничего
+
+    Функция сохранения, встроенная в tabular, вписывает названия колонок
+    в первую строку выходного файла. Нам это не подходит. Придется удалять
+    уже после сохранения файла на диск.
+    """
     # taking basename from full path to file
-    s = (re.sub('.*/|\.[^.]*$','',args.input_file.name) + '_table_pe3.tex')
+    #s = (re.sub('.*/|\.[^.]*$','',args.input_file.name) + '_table_pe3.tex')
 
     # save to temporal file
     array.saveSV('table.tmp', delimiter='&')
@@ -134,24 +156,37 @@ def save_to_file(filename,array): #{{{
 #}}}
 
 
+def process_value(s, refdes): #{{{
+    """ Приводит поле Value к каноничному виду.
 
-def process_value(s, refdes): # принимает строку и тип элемента, напр. C, L, R {{{
+    Принимает строку и тип элемента, напр. C, L, R.
+    Тип элемента нужен для выбора правильных реглярок.
 
-    # FIXME: сопротивление можно обозначать \textohm
+    Возвращает обработанную строку.
+    """
 
-    # регулярные выражения для поиска номиналов:
+    # регулярные выражения для поиска номиналов{{{
     tolerance =     re.compile('[0-9]*[.,]*[0-9]*[ ]*\\\\%')
     voltage =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[vV]')
     capacitance =   re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?[Ff]')
-    resistance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?Ohm')
+    resistance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[Oo]hm')
     inductance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[unm]?[Hh]')
     current =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[m]?[Aa]')
+    #}}}
 
+    def clean(oldstring, *args): # вспомогательная функция {{{ 
+        """ Обработка строки регулярками.
 
-    # принимает:    строку, которую надо обработать
-    #               скомпилированные регулярки
-    # возвращает:   обработанную входную строку
-    def clean(oldstring, *args): #{{{
+        Принимает строку, которую надо обработать и скомпилированные
+        регулярки, которыми надо обрабатывать. Порядок регулярок имеет
+        значение - он определяет порядок следования значений номиналов
+        в выходной строке. Куски, соответствующие регуляркам выкусываются
+        из входной строки и из этих кусков составляется выходная строка.
+        Остатки входной строки (то, что не попало ни в одну регулярку)
+        прилепляется в конец.
+
+        Возвращает обработанную строку.
+        """
         newstring = ''
 	s1 = ''
         for regexp in (args):
@@ -165,24 +200,28 @@ def process_value(s, refdes): # принимает строку и тип элемента, напр. C, L, R {
                 s1 = re.sub('^,','0,',s1)
                 # FIXME: тут уместно будет перевести на русский
                 newstring += (s1 + ' ')
+
             # теперь newstring содержит все нужные нам подстроки в нужном порядке
             # надо удалить их из исходной строки
             oldstring = regexp.sub('',oldstring)
+
         # остатки старой строки прилепить в конец новой
+        # TODO: если осталось что-то кроме пробелов выдать варнинг
+        #if re.search('[^     ]*',oldstring)
         newstring = newstring + oldstring
 	# снабдим процентаж знаком плюс-минус (\textpm)
-        #print '-',newstring
 	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}\\1',newstring)
-        #print '+',newstring
         # вычистим из конца пробелы, которые остались от старой строки
         newstring = re.sub('[	]*$','',newstring)
 	return newstring
     #}}}
 
+    # логика выбора нужных регулярок в зависимости от типа элемента {{{
     if refdes == 'C':
         s = clean(s, voltage, capacitance, tolerance)
     elif refdes == 'R':
         s = clean(s, resistance, tolerance)
+        # FIXME: сопротивление можно обозначать \textohm
     else: # обработчик лажи
         unknown_element = True
         for i in pos_names:
@@ -192,7 +231,9 @@ def process_value(s, refdes): # принимает строку и тип элемента, напр. C, L, R {
             # аварийное завершение, скрипт не знает такого элемента
             print 'Something goes wrong. I don\'t know element type:',refdes
             quit()
+    #}}}
 
+    # Дополнительные вычистки{{{
     # тут же можно поудалять лишних пробелов
     s = re.sub('[ ]*",[ ]*','",',s)
     s = re.sub('^[ ]*|[ ]*$','',s)
@@ -200,14 +241,16 @@ def process_value(s, refdes): # принимает строку и тип элемента, напр. C, L, R {
 
     # а так же случайно попавшие двойные последовательности вроде ",",
     s = re.sub('",+','",',s)
+    #}}}
+
     return s
 #}}}
 
 
+def prepare(x): # {{{
+    """ Функция предварительной очистки и подготовки.
 
-
-def prepare(x): # cleaning table {{{
-
+    """
     # split 'RefDes' column in two columns {{{
     refdes = []
     refdes_num = []
@@ -307,20 +350,25 @@ def prepare(x): # cleaning table {{{
 
     # screaning latex special symbols{{{
     # this was moved here because & is input delimeter
-    x.replace('&','\&',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
+    x.replace('&','\&',strict=False, cols=['RefDes', 'Title', 'Type', \
+                                            'SType', 'Value', 'Docum', \
+                                            'Addit', 'Note', 'OrderCode'])
     #}}}
 
     return x
 #}}}
 
 
-def indexing(x): # заполнение последних двух столбцов таблицы position_names{{{
-    xlocal = x
+def indexing(array): #{{{
+    """ Функция поиска строк с элементами одного типа.
+
+    Фактически, заполнение последних двух столбцов таблицы position_names
+    """
     for key in pos_names:
         m = 0
         i = 0
-        while m < len(xlocal):
-            if xlocal['RefDes'][m] == key:
+        while m < len(array):
+            if array['RefDes'][m] == key:
                 i += 1
                 if component_des[key][2] == -1:
                     component_des[key][2] = m # смещение
@@ -330,14 +378,14 @@ def indexing(x): # заполнение последних двух столбцов таблицы position_names{{{
     #searching for unknown types of element
     m = 0
     fail = False
-    for refdes in xlocal['RefDes']:
+    for refdes in array['RefDes']:
         known = False
         for key in pos_names:
             if refdes == key:
                 known = True
         if not known:
             fail = True
-            print '!!! Unknown element type:', xlocal['RefDes'][m] + str(xlocal['RefDesNum'][m])
+            print '!!! Unknown element type:', array['RefDes'][m] + str(array['RefDesNum'][m])
         m += 1
     if fail:
         print '\nДальнейшая работа невозможна из-за наличия элементов неизвестного типа.'
@@ -349,7 +397,16 @@ def indexing(x): # заполнение последних двух столбцов таблицы position_names{{{
 #}}}
 
 
-def mboxing(array, *columns): #заключение нужных ячеек в \mbox{} {{{
+def mboxing(array, *columns): #{{{
+    """ Заключение нужных ячеек в \mbox{}.
+
+    Принимает имя таблицы и имена колонок, которые надо заключить в mbox.
+
+    Возвращает обработанную таблицу.
+    """
+    if len(columns) == 0:
+        return(array)
+
     m = 0
     i = ''
     while m < len(array):
@@ -361,8 +418,12 @@ def mboxing(array, *columns): #заключение нужных ячеек в \mbox{} {{{
 #}}}
 
 
-def pe3(x): # создание таблицы для перечня элементов{{{
-    pe3_in = x
+def pe3(pe3_in): #{{{
+    """ Создание таблицы для перечня элементов.
+
+    Ужос, а не функция!
+    Надо переписать, повыносить, что можно во внешние функции
+    """
     firstrun = True
 
     # process Value column
@@ -574,7 +635,6 @@ Process generated list by this script.
 ------------------------ Script section --------------------------------------
 '''))#}}}
 
-
 parser.add_argument('input_file', # {{{
         metavar='filename',
         type=file,
@@ -621,6 +681,7 @@ for line in (raw_input_file):
     if re.search('^[    ]*\r\n', line) == None: # if string non empty
         line = re.sub('"','',line) # delete all quotes
         line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
+        # screaning latex special symbols
         line = re.sub('\\\\','\\\\textbackslash ',line)
         line = re.sub('%','\%',line)
         line = re.sub('_','\_',line)
@@ -633,14 +694,14 @@ for line in (raw_input_file):
         out.write(line)
 
 # Hack! This line tell tabarray, that all columns contain string values
-# Don't forget to remove it after loading file
+# Remove it after loading file
 last_line = re.sub('[^&]',' ',raw_input_file[0])
 out.write(last_line)
 out.close()
 
 # reading file into array 
 x = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '&',headerlines=1)
-x = x[:-1] # remove hacked line
+x = x[:-1] # remove hack-line
 x = column_wide(x)
 tmp_tab = x # create temporal array
 os.remove("cleaned_output.tmp") # remove temporal file
