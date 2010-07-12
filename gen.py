@@ -3,15 +3,9 @@
 
 # TODO:
 
-# номиналы отбивать короткими пробелами от наименования физ. величины, возможно переводить uF в мкФ
-# вставить компиляцию регулярок в функцию фильтрации
-# добавить валидатор, который будет ругаться в лог на несуществующие физ. величины
-
-# единицы измерений писать строго обязательно: kOhm, MOhm, pF
-
+# единицы измерений при создании пикадовой схемы писать строго обязательно: kOhm, MOhm, pF
 # При задании номинала конденсатора в P-CAD писать в следующем порядке: вольтаж, емкость, процентность
 # использовать исключительно латиницу: uF, V
-# Сделать переставлялку значений
 
 # Сжимать позиционные обозначения по горизонтали, только если одно из них перевалило за 10
 
@@ -24,7 +18,6 @@ import tabular as tb
 from operator import itemgetter # for sort() and sorted()
 import argparse
 import sys
-
 
 # preparing some data structures {{{
 
@@ -46,504 +39,570 @@ column_num = len(column_names)
 
 # словарь для поиска по готовому массиву {{{
 # 
+# Тут хранятся все известные нам элементы. Если попадется неизвестный -
+# скрипт прервет выполнение и предложит пользователю добавить сюда
+# неизвестный элемент
+#
 # Как заполнять:
 # 'key' : ['ед. число','мн. число','смещение','количество']
 #
-# Смещение и количество по умолчанию равны -1, они будут заполняться автоматически
-# по мере анализа главной таблицы.
-component_des = {	'C' : ['Конденсатор','Конденсаторы',-1,-1], \
-					'R' : ['Резистор','Резисторы',-1,-1], \
-					'D' : ['Микросхема','Микросхемы',-1,-1], \
-					'DA': ['Микросхема','Микросхемы',-1,-1], \
-					'DD': ['Микросхема','Микросхемы',-1,-1], \
-					'VD': ['Диод','Диоды',-1,-1], \
-					'XP': ['Вилка','Вилки',-1,-1], \
-					'XS': ['Розетка','Розетки',-1,-1], \
-					}
+# Смещение и количество по умолчанию равны -1, они будут заполняться
+# во время анализа главной таблицы.
+component_des = {   'C' : ['Конденсатор','Конденсаторы',-1,-1], \
+                    'E' : ['Перемычка','Перемычки',-1,-1], \
+                    'R' : ['Резистор','Резисторы',-1,-1], \
+                    'D' : ['Микросхема','Микросхемы',-1,-1], \
+                    'DA': ['Микросхема','Микросхемы',-1,-1], \
+                    'DD': ['Микросхема','Микросхемы',-1,-1], \
+                    'L' : ['Дроссель','Дроссели',-1,-1], \
+                    'RK': ['Терморезистор','Терморезисторы',-1,-1], \
+                    'RP': ['Резистор подстроечный','Резисторы подстроечные',-1,-1], \
+                    'VD': ['Диод','Диоды',-1,-1], \
+                    'XP': ['Вилка','Вилки',-1,-1], \
+                    'XS': ['Розетка','Розетки',-1,-1], \
+                    'Z' : ['Фильтр радиочастотный','Фильтры радиочастотные',-1,-1], \
+                    'ZQ': ['Резонатор кварцевый','Резонаторы кварцевые',-1,-1], \
+                    }
+# Отдельно посортируем, потому что питоновый словарь выбирает 
+# элементы в случайном порядке
 pos_names = sorted(component_des.keys())
 #}}}
 
 #}}}
 
 
-def column_wide(narrow_tab): # функция для расширения столбцов {{{
-# из-за недоработок колонки не могут расширяться динамически
-# поэтому на придется заранее вставить в конец файла поля заведомо
-# бОльшей ширины
-# принимает обычную таблицу, возвращает "раздутую"
+def column_wide(narrow_tab): #{{{
+    """ Функция для расширения столбцов
 
-	# crate fake row
-	first_row = narrow_tab[:1] # возьмем первый ряд для определения типа колонок
-	empty_tuple = ()
+    Принимает обычную таблицу, возвращает "раздутую"
 
-	for i in first_row.dtype.names:
-		if (type(first_row[i][0]).__name__) == 'string_':
-			empty_tuple += (column_strut,)
-		else:
-			empty_tuple +=('',)
+    Из-за недоработок класса tabular колонки не могут расширяться динамически,
+    поэтому на придется заранее вставить в конец файла поля заведомо
+    бОльшей ширины.
+    """
+    # crate fake row
+    first_row = narrow_tab[:1] # возьмем первый ряд для определения типа колонок
+    empty_tuple = ()
 
-	wide_row = tb.tabarray(records=(empty_tuple,), names=list(first_row.dtype.names))
+    for i in first_row.dtype.names:
+        if (type(first_row[i][0]).__name__) == 'string_':
+            empty_tuple += (column_strut,)
+        else:
+            empty_tuple +=('',)
 
-	# now we have table from one empty wide row
-	# stack them to input table
-	wide_tab = narrow_tab.rowstack([wide_row])
+    wide_row = tb.tabarray(records=(empty_tuple,), names=list(first_row.dtype.names))
 
-	# for now wide row is unnecessary 
-	wide_tab = wide_tab[:-1]
+    # now we have table from one empty wide row
+    # stack them to input table
+    wide_tab = narrow_tab.rowstack([wide_row])
 
-	return wide_tab
+    # for now wide row is unnecessary
+    # remove them
+    wide_tab = wide_tab[:-1]
+
+    return wide_tab
 #}}}
 
 
-def deleterow(input_tab,m): # функция удаления рядов из таблицы {{{
+def deleterow(input_tab, m): #{{{
+    """ Функция удаления рядов из таблицы.
 
-	if m == 0:
-		return input_tab[1:]
-	elif m == len(tmp_tab):
-		return input_tab[:-1]
-	else:
-		aa = input_tab[:m]
-		bb = input_tab[(m+1):]
+    Принимает входную таблицу и номер ряда, который надо удалить.
 
-	aa = aa.rowstack(bb)
-	aa = column_wide(aa)
+    Возвращает таблицу без указанного ряда.
 
-	return aa
+    Удалить напрямую нельзя, зато можно откусить 2 куска,
+    а потом склеить их вместе.
+    """
+    if m == 0:
+        return input_tab[1:]
+    elif m == len(tmp_tab):
+        return input_tab[:-1]
+    else:
+        aa = input_tab[:m]
+        bb = input_tab[(m+1):]
+
+    aa = aa.rowstack(bb)
+    aa = column_wide(aa) # раздуем таблицу
+
+    return aa
 #}}}
 
 
-def save_to_file(filename,array): #{{{
-	# taking basename from full path to file
-	s = (re.sub('.*/|\.[^.]*$','',args.input_file.name) + '_table_pe3.tex')
+def save_to_file(filename, array): #{{{
+    """ Функция сохранения таблицы в файл.
 
-	# save to temporal file
-	array.saveSV('table.tmp', delimiter='&')
-	
-	f = open('table.tmp','r')
-	aa = f.readlines()
-	aa = aa[1:]
-	f.close()
+    Принимает имя выходного файла и таблицу, которую надо сохранить
 
-	f = open(filename,'w')
-	m = 0
-	while m < len(aa):
-		f.write(aa[m])
-		m += 1
-	f.close()
+    Не возвращает ничего
 
-	os.remove('table.tmp')
+    Функция сохранения, встроенная в tabular, вписывает названия колонок
+    в первую строку выходного файла. Нам это не подходит. Придется удалять
+    уже после сохранения файла на диск.
+    """
+    # taking basename from full path to file
+    #s = (re.sub('.*/|\.[^.]*$','',args.input_file.name) + '_table_pe3.tex')
+
+    # save to temporal file
+    array.saveSV('table.tmp', delimiter='&')
+
+    f = open('table.tmp','r')
+    aa = f.readlines()
+    aa = aa[1:]
+    f.close()
+
+    f = open(filename,'w')
+    m = 0
+    while m < len(aa):
+        f.write(aa[m])
+        m += 1
+    f.close()
+
+    os.remove('table.tmp')
 #}}}
 
 
+def process_value(s, refdes): #{{{
+    """ Приводит поле Value к каноничному виду.
 
-def process_value(s, type): # принимает строку и тип элемента, напр. C, L, R {{{
+    Принимает строку и тип элемента, напр. C, L, R.
+    Тип элемента нужен для выбора правильных реглярок.
 
-	#выделить все знакомые строки re.findall
-	#потом их все поудалять (re.sub), остаток записать в конец
-	# в выделенныех знакомых отделить цифры от букв
+    Возвращает обработанную строку.
+    """
 
-	# сопротивление можно обозначать \textohm
+    # регулярные выражения для поиска номиналов{{{
+    tolerance =     re.compile('[0-9]*[.,]*[0-9]*[ ]*\\\\%')
 
-	tolerance = re.compile('[0-9]*[.,]*[0-9]*[ ]*\\\\%')
-	voltage = re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[vV]')
-	capacitance = re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?[Ff]')
+    capacitance =   re.compile('[0-9]*[.,]*[0-9]*[ ]*[umnp]?F')
+    current =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[num]?A')
+    frequency =     re.compile('[0-9]*[.,]*[0-9]*[ ]*[kMG]?Hz')
+    inductance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[unm]?H')
+    power =         re.compile('[0-9]*[.,]*[0-9]*[ ]*[umk]?W')
+    resistance =    re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?Ohm')
+    voltage =       re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?V')
+    #}}}
 
-	resistance_re = re.compile('[0-9]*[.,]*[0-9]*[ ]*[mkM]?[Ohm]')
+    def clean(oldstring, *args): # вспомогательная функция {{{ 
+        """ Обработка строки регулярками.
 
-	#def voltage(s):
-	#	s = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([umnpkM]?)([vV])',' \\1\\2\\3",\\5V ',s)
-	#	return s
-	#def capacitance(s):
-	#	s = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([umnp]?)([Ff])',' \\1\\2\\3",\\5F ',s)
-	#	return s
-	def resistance(s):
-		s = re.sub('^([0-9]*)([.,]*)([0-9]*)([ ]*)([mkM]?[Ohm]?)',' \\1\\2\\3",\\5Ohm ',s)
-		return s
-	def	inductance(s):
-		pass
-		return s
-	def current(s):
-		pass
-		return s
+        Принимает строку, которую надо обработать и скомпилированные
+        регулярки, которыми надо обрабатывать. Порядок регулярок имеет
+        значение - он определяет порядок следования значений номиналов
+        в выходной строке. Куски, соответствующие регуляркам выкусываются
+        из входной строки и из этих кусков составляется выходная строка.
+        Остатки входной строки (то, что не попало ни в одну регулярку)
+        прилепляется в конец.
 
+        Возвращает обработанную строку.
+        """
+        newstring = ''
+	s1 = ''
+        for regexp in (args):
+            t1 = regexp.findall(oldstring)
+            if len(t1) > 0:
+                # вставим нужные отбивки
+                s1 = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([a-zA-Z\\\\%]*)','\\1\\2\\3",\\5',t1[0])
+                # заменить точку на запятую
+                s1 = re.sub('([0-9]*)[.,]([0-9]*",)','\\1,\\2',s1)
+                # вставить ведущий ноль
+                s1 = re.sub('^,','0,',s1)
+                # FIXME: тут уместно будет перевести на русский
+                newstring += (s1 + ' ')
 
-	# принимает:	строку, которую надо обработать
-	#				скомпилированные регулярки
-	# возвращает:	обработанную входную строку
-	def clean(oldstring, *args): #{{{
-		newstring = ''
-		for regexp in (args):
-			t1 = regexp.findall(oldstring)
-			if len(t1) > 0:
-				# вставим нужные отбивки
-				s1 = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([a-zA-Z\\\\%]*)','\\1\\2\\3",\\5',t1[0])
-				#	  вставить ведущий ноль
+            # теперь newstring содержит все нужные нам подстроки в нужном порядке
+            # надо удалить их из исходной строки
+            oldstring = regexp.sub('',oldstring)
 
-				#	заменить точку на запятую
+        # остатки старой строки прилепить в конец новой
+        # TODO: если осталось что-то кроме пробелов выдать варнинг
+        #if re.search('[^     ]*',oldstring)
+        newstring = newstring + oldstring
+	# снабдим процентаж знаком плюс-минус (\textpm)
+	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}",\\1',newstring)
+        # вычистим из конца пробелы, которые остались от старой строки
+        newstring = re.sub('[	]*$','',newstring)
+	return newstring
+    #}}}
 
+    # логика выбора нужных регулярок в зависимости от типа элемента {{{
+    if refdes ==    'C':
+        s = clean(s, capacitance, tolerance, voltage)
+    elif refdes ==  'L':
+        s = clean(s, inductance, tolerance, current)
+    elif (refdes == 'R') | (refdes == 'RK') | (refdes == 'RP'):
+        s = clean(s, resistance, tolerance, power)
+        # FIXME: сопротивление можно обозначать \textohm
+        #s = re.sub('Ohm','{\\\\textohm}',s)
+    elif refdes == 'ZQ':
+        s = clean(s, frequency, tolerance)
+    else: # обработчик лажи
+        unknown_element = True
+        for i in pos_names:
+            if refdes == i:
+                unknown_element = False
+        if unknown_element:
+            # аварийное завершение, скрипт не знает такого элемента
+            print 'Something goes wrong. I don\'t know element type:',refdes
+            quit()
+    #}}}
 
-				# перевести на русский
+    # Дополнительные вычистки{{{
+    # тут же можно поудалять лишних пробелов
+    s = re.sub('[ ]*",[ ]*','",',s)
+    s = re.sub('^[ ]*|[ ]*$','',s)
+    s = re.sub('[ ]+',' ',s)
 
+    # а так же случайно попавшие двойные последовательности вроде ",",
+    s = re.sub('",+','",',s)
+    #}}}
 
-				newstring += (s1 + ' ')
-		# теперь newstring содержит все нужные нам подстроки в нужном порядке
-		# надо удалить их из исходной строки и остатки прилепить в конце
-		print newstring
-	#}}}
-
-	if type == 'C':
-		clean(s, voltage, capacitance, tolerance)
-
-	elif type == 'R':
-		s = resistance(s)
-
-	
-
-	# процентаж будет прогоняться для всех желающих
-	# будем считать, что все знаки % уже заэкранированы
-	s = re.sub('[ ]*([0-9]*)([.,]*)([0-9]*)([ ]*)(\\\\%)','",\\\\textpm",\\1\\2\\3",\\5',s)
-
-	# тут же можно поудалять лишних пробелов
-	s = re.sub('[ ]*",[ ]*','",',s)
-	s = re.sub('^[ ]*|[ ]*$','',s)
-	s = re.sub('[ ]+',' ',s)
-
-	# а так же случайно попавшие двойные последовательности вроде ",",
-	s = re.sub('[",]+','",',s)
-
-	return s
-
-
-	# ., (заменить все точки на запятые, и добавить ведущий ноль, если надо)
-
+    return s
 #}}}
 
 
+def prepare(x): # {{{
+    """ Функция предварительной очистки и подготовки.
 
+    """
+    # split 'RefDes' column in two columns {{{
+    refdes = []
+    refdes_num = []
+    # получим столбец цифр
+    m = 0
+    while m < len(x):
+        refdes_num.append(int(re.sub('[a-zA-Z]*','',x['RefDes'][m])))
+        m += 1
+    # в RefDes запишем только буквы
+    m = 0
+    while m < len(x):
+        x['RefDes'][m] = (re.sub('[0-9]*','',x['RefDes'][m]))
+        m += 1
+    # добавим столбец номеров
+    tmp_tab = x.addcols([refdes_num], names='RefDesNum')
+    x = tmp_tab
+    #}}}
 
-def prepare(x): # cleaning table {{{
+    # remove rows with empty RefDes{{{
+    m = 0
+    deleted = False
+    while m < len(x):
+        if x['RefDes'][m] == '':
 
-	# split 'RefDes' column in two columns {{{
-	refdes = []
-	refdes_num = []
-	# получим столбец цифр
-	m = 0
-	while m < len(x):
-		refdes_num.append(int(re.sub('[a-zA-Z]*','',x['RefDes'][m])))
-		m += 1	
-	# в RefDes запишем только буквы
-	m = 0
-	while m < len(x):
-		x['RefDes'][m] = (re.sub('[0-9]*','',x['RefDes'][m]))
-		m += 1
-	# добавим столбец номеров
-	tmp_tab = x.addcols([refdes_num], names='RefDesNum')
-	x = tmp_tab
-	#}}}
+            log_msg = 'deleted: '
+            for i in column_names:
+                log_msg += str(x[i][m])
+            logfile.write(log_msg + '\n')
 
-	# remove rows with empty RefDes{{{
-	m = 0
-	deleted = False
-	while m < len(x):
-		if x['RefDes'][m] == '':
+            x = deleterow(x,m)
+            deleted = True
+            m -= 1
+        m += 1
+    if deleted:
+        print '*** Some elements deleted, because they have no RefDes (see:',logfile.name,')'
+    #}}}
 
-			log_msg = 'deleted: '
-			for i in column_names:
-				log_msg += str(x[i][m])
-			logfile.write(log_msg + '\n')
+    # remove wrong columns{{{
+    m = 0
+    flag = 0
+    for i in x.dtype.names:
+        while m < column_num:
+            if column_names[m] == i: # raise flag if any match
+                flag = 1
+            m+=1
+        if flag == 0:
+            print '*** deleting wrong column', i
+            tmp_tab = x.deletecols([i])
+        m = 0
+        flag = 0
+    #}}}
 
-			x = deleterow(x,m)
-			deleted = True
-			m -= 1
-		m += 1
-	if deleted:
-		print '*** Some elements deleted, because they have no RefDes (see:',logfile.name,')'
-	#}}}
+    # create empty column{{{
+    empty_col = []
+    m = 0
+    while m < len(x):
+        empty_col.append('')
+        m+=1
+    #}}}
 
-	# remove wrong columns{{{
-	m = 0 
-	flag = 0
-	for i in x.dtype.names: 
-		while m < column_num: 
-			if column_names[m] == i: # raise flag if any match
-				flag = 1
-			m+=1
-		if flag == 0:
-			print '*** deleting wrong column', i
-			tmp_tab = x.deletecols([i])
-		m = 0
-		flag = 0
-	#}}}
-
-	# create empty column{{{
-	empty_col = []
-	m = 0
-	while m < len(x):
-		empty_col.append('')
-		m+=1
-	#}}}
-
-	# add empty columns if needed {{{
-	col_names = x.dtype.names
-	col_num = len(col_names)
-	m = 0
-	flag = 0
-	for i in column_names:
-		while m < col_num:
-			if col_names[m] == i: # raise flag if any match
-				flag = 1
-			m+=1
-		if flag == 0:
-			print '*** adding empty column', i
-			tmp_tab = x.addcols([empty_col],names=[i])
-		m = 0
-		flag = 0
-	x = tmp_tab # now x contain only suitable columns
+    # add empty columns if needed {{{
+    col_names = x.dtype.names
+    col_num = len(col_names)
+    m = 0
+    flag = 0
+    for i in column_names:
+        while m < col_num:
+            if col_names[m] == i: # raise flag if any match
+                flag = 1
+            m+=1
+        if flag == 0:
+            print '*** adding empty column', i
+            tmp_tab = x.addcols([empty_col],names=[i])
+        m = 0
+        flag = 0
+    x = tmp_tab # now x contain only suitable columns
 
 #}}}
 
-	# stack columns 1 by 1 in right order{{{
-	tmp_tab = x[['RefDes']] # save to tmp_tab first column
-	m = 1
-	while m < column_num: 
-		z = tmp_tab.colstack(x[[column_names[m]]])
-		tmp_tab = z
-		m+=1
-	x = z # now x contain columns in right order 
-	#}}}
+    # stack columns 1 by 1 in right order{{{
+    tmp_tab = x[['RefDes']] # save to tmp_tab first column
+    m = 1
+    while m < column_num:
+        z = tmp_tab.colstack(x[[column_names[m]]])
+        tmp_tab = z
+        m+=1
+    x = z # now x contain columns in right order 
+    #}}}
 
-	# add russian LaTeX quotas to column 'Addit'{{{
-	m = 0
-	while m < len(x):
-		if re.search('^[	]*$', x['Addit'][m]) == None: # если поле НЕ пустое
-			x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
-		m+=1
-	#}}}
+    # add russian LaTeX quotas to column 'Addit'{{{
+    m = 0
+    while m < len(x):
+        if re.search('^[    ]*$', x['Addit'][m]) == None: # если поле НЕ пустое
+            x['Addit'][m] = ('<<' + x['Addit'][m] + '>>')
+        m+=1
+    #}}}
 
-	# screaning latex special symbols{{{
-	# this was moved here because & is input delimeter
-	x.replace('&','\&',strict=False, cols=['RefDes', 'Title', 'Type', 'SType', 'Value', 'Docum', 'Addit', 'Note', 'OrderCode'])
-	#}}}
+    # screaning latex special symbols{{{
+    # this was moved here because & is input delimeter
+    x.replace('&','\&',strict=False, cols=['RefDes', 'Title', 'Type', \
+                                            'SType', 'Value', 'Docum', \
+                                            'Addit', 'Note', 'OrderCode'])
+    #}}}
 
-	return x
+    return x
 #}}}
 
 
-def indexing(x): # заполнение последних двух столбцов таблицы position_names{{{
-	xlocal = x
-	for key in pos_names:
-		m = 0
-		i = 0
-		while m < len(xlocal):
-			if xlocal['RefDes'][m] == key:
-				i += 1
-				if component_des[key][2] == -1:
-					component_des[key][2] = m # смещение
-			m += 1
-		component_des[key][3] = i # количество
+def indexing(array): #{{{
+    """ Функция поиска строк с элементами одного типа.
 
-	#searching for unknown types of element
-	m = 0
-	fail = False
-	for refdes in xlocal['RefDes']:
-		known = False
-		for key in pos_names:
-			if refdes == key:
-				known = True
-		if not known:
-			fail = True
-			print '!!! Unknown element type:', xlocal['RefDes'][m] + str(xlocal['RefDesNum'][m])
-		m += 1
-	if fail:
-		print '\nДальнейшая работа невозможна из-за наличия элементов неизвестного типа.'
-		print 'Возможные причины: опечатка в RefDes при создании элемента для P-CAD,'
-		print '                   либо, это - новый элемент, отсутствующий в базе.'
-		print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
-		print 'и прогоните скрипт заново.'
-		quit()
+    Фактически, заполнение последних двух столбцов таблицы position_names
+    """
+    for key in pos_names:
+        m = 0
+        i = 0
+        while m < len(array):
+            if array['RefDes'][m] == key:
+                i += 1
+                if component_des[key][2] == -1:
+                    component_des[key][2] = m # смещение
+            m += 1
+        component_des[key][3] = i # количество
+
+    #searching for unknown types of element
+    m = 0
+    fail = False
+    for refdes in array['RefDes']:
+        known = False
+        for key in pos_names:
+            if refdes == key:
+                known = True
+        if not known:
+            fail = True
+            print '!!! Unknown element type:', array['RefDes'][m] + str(array['RefDesNum'][m])
+        m += 1
+    if fail:
+        print '\nДальнейшая работа невозможна из-за наличия элементов неизвестного типа.'
+        print 'Возможные причины: опечатка в RefDes при создании элемента для P-CAD,'
+        print '                   либо, это - новый элемент, отсутствующий в базе.'
+        print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
+        print 'и прогоните скрипт заново.'
+        quit()
 #}}}
 
 
-def mboxing(array, *columns): #заключение нужных ячеек в \mbox{} {{{
-	m = 0
-	i = ''
-	while m < len(array):
-		for i in (columns):
-			if not re.match('^[	]*$', array[i][m]):
-				array[i][m] = '\mbox{' + array[i][m] + '}'
-		m += 1
-	return(array)
+def mboxing(array, *columns): #{{{
+    """ Заключение нужных ячеек в \mbox{}.
+
+    Принимает имя таблицы и имена колонок, которые надо заключить в mbox.
+
+    Возвращает обработанную таблицу.
+    """
+    if len(columns) == 0:
+        return(array)
+
+    m = 0
+    i = ''
+    while m < len(array):
+        for i in (columns):
+            if not re.match('^[ ]*$', array[i][m]):
+                array[i][m] = '\mbox{' + array[i][m] + '}'
+        m += 1
+    return(array)
 #}}}
 
 
-def pe3(x): # создание таблицы для перечня элементов{{{
-	pe3_in = x 
-	firstrun = True
+def pe3(pe3_in): #{{{
+    """ Создание таблицы для перечня элементов.
 
-	# process Value column
-	m = 0 
-	while m < len(pe3_in):
-		pe3_in['Value'][m] = process_value(pe3_in['Value'][m], pe3_in['RefDes'][m])
-		m += 1
+    Ужос, а не функция!
+    Надо переписать, повыносить, что можно во внешние функции
+    """
+    firstrun = True
 
-	# enclose in mbox
-	pe3_in = mboxing(pe3_in,'Title','Type','SType','Value','Docum','Addit','Note')
+    # process Value column
+    m = 0
+    while m < len(pe3_in):
+        pe3_in['Value'][m] = process_value(pe3_in['Value'][m], pe3_in['RefDes'][m])
+        m += 1
 
-	# merge columns
-	m = 0 
-	while m < len(pe3_in):
-		pe3_in['Title'][m] = pe3_in['Type'][m] + pe3_in['SType'][m] + ' ' + \
-				pe3_in['Value'][m] + ' ' + \
-				pe3_in['Docum'][m] + ' ' + \
-				pe3_in['Addit'][m]
-		m+=1
+    # enclose in mbox
+    pe3_in = mboxing(pe3_in,'Title','Type','SType','Value','Docum','Addit','Note')
 
-	# rename 'Title' column
-	pe3_in.renamecol('Title','Item')
+    # merge columns
+    m = 0
+    while m < len(pe3_in):
+        pe3_in['Title'][m] = pe3_in['Type'][m] + pe3_in['SType'][m] + ' ' + \
+                pe3_in['Value'][m] + ' ' + \
+                pe3_in['Docum'][m] + ' ' + \
+                pe3_in['Addit'][m]
+        m+=1
 
-	# rename and clean 'Addit' columnt
-	pe3_in.renamecol('Addit','Sum')
-	m = 0 
-	while m < len(pe3_in):
-		pe3_in['Sum'][m] = ''
-		m += 1
+    # rename 'Title' column
+    pe3_in.renamecol('Title','Item')
 
-	# remove unnecessary columns
-	pe3_in = pe3_in.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
-		
-	for key in pos_names: # Уплотнение рядов {{{
-		# catch one RefDes
-		component_slice = pe3_in[ component_des[key][2] : (component_des[key][2] + component_des[key][3]) ]
+    # rename and clean 'Addit' columnt
+    pe3_in.renamecol('Addit','Sum')
+    m = 0
+    while m < len(pe3_in):
+        pe3_in['Sum'][m] = ''
+        m += 1
 
-		# take first row
-		tmp_tab = component_slice[:1]
+    # remove unnecessary columns
+    pe3_in = pe3_in.deletecols(['Type', 'SType', 'Value', 'Docum', 'OrderCode'])
 
-		m = 0
-		if len(component_slice) > 1:
-			prev = component_slice['RefDes'][m]	+	component_slice['Item'][m] +	component_slice['Note'][m]
-			next = component_slice['RefDes'][m+1] + component_slice['Item'][m+1] +	component_slice['Note'][m+1]
+    for key in pos_names: # Уплотнение рядов {{{
+        # catch one RefDes
+        component_slice = pe3_in[ component_des[key][2] : (component_des[key][2] + component_des[key][3]) ]
 
-			while m < (len(component_slice)-2): 
-				if next == prev:
-					# take next row
-					prev = next
-					next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
-				else: # сюда попадаем, если натыкаемся на незнакомую строку
-					# добавим эту незнакомую строку в tmp_tab
-					tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
-							component_slice['RefDesNum'][m+1] - 1, \
-							component_slice['Item'][m+1], \
-							component_slice['Sum'][m+1], \
-							component_slice['Note'][m+1]))
-					# сместим RefDesNum на одну позицию назад, чтобы не терялись значения
-					tmp_tab['RefDesNum'][len(tmp_tab) - 2] = tmp_tab['RefDesNum'][len(tmp_tab) - 1]
-					# take next row
-					prev = next
-					next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
-				m += 1
-			
-			# по выходу из цикла поправим предпоследний ряд после смещения
-			tmp_tab['RefDesNum'][len(tmp_tab) - 1] = component_slice['RefDesNum'][m+1] - 1
+        # take first row
+        tmp_tab = component_slice[:1]
 
-			# персонально обработаем последний ряд
-			# либо добавиться новый, либо изменится RefDesNUm
-			if next == prev:
-				tmp_tab['RefDesNum'][len(tmp_tab)-1] = component_slice['RefDesNum'][m+1]
-			else:
-				tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
-						component_slice['RefDesNum'][m+1], \
-						component_slice['Item'][m+1], \
-						component_slice['Sum'][m+1], \
-						component_slice['Note'][m+1]))
-		#}}}
+        m = 0
+        if len(component_slice) > 1:
+            prev = component_slice['RefDes'][m] +   component_slice['Item'][m] +    component_slice['Note'][m]
+            next = component_slice['RefDes'][m+1] + component_slice['Item'][m+1] +  component_slice['Note'][m+1]
 
-		# обновление поля RefDes {{{
-		if len(tmp_tab) > 0:
+            while m < (len(component_slice)-2):
+                if next == prev:
+                    # take next row
+                    prev = next
+                    next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
+                else: # сюда попадаем, если натыкаемся на незнакомую строку
+                    # добавим эту незнакомую строку в tmp_tab
+                    tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
+                            component_slice['RefDesNum'][m+1] - 1, \
+                            component_slice['Item'][m+1], \
+                            component_slice['Sum'][m+1], \
+                            component_slice['Note'][m+1]))
+                    # сместим RefDesNum на одну позицию назад, чтобы не терялись значения
+                    tmp_tab['RefDesNum'][len(tmp_tab) - 2] = tmp_tab['RefDesNum'][len(tmp_tab) - 1]
+                    # take next row
+                    prev = next
+                    next = component_slice['RefDes'][m+2] + component_slice['Item'][m+2] + component_slice['Note'][m+2]
+                m += 1
 
-			def scale(str):
-				str = '\scalebox{0.75}[1]{' + str + '}'
-				return str
+            # по выходу из цикла поправим предпоследний ряд после смещения
+            tmp_tab['RefDesNum'][len(tmp_tab) - 1] = component_slice['RefDesNum'][m+1] - 1
 
-			m = 0
-			while m < len(tmp_tab):
-				sum = 0
-				if m == 0: # если мы в первом ряду
-					sum = int(tmp_tab['RefDesNum'][m])
-					if sum > 2:
-						refdes = key + '1' + '...' + key + str(tmp_tab['RefDesNum'][m])
-						refdes = scale(refdes)
-					if sum == 2:
-						refdes = key + '1' + ', ' + key + str(tmp_tab['RefDesNum'][m])
-						refdes = scale(refdes)
-					if sum == 1:
-						refdes = key + str(tmp_tab['RefDesNum'][m])
-						#refdes = scale(refdes)
+            # персонально обработаем последний ряд
+            # либо добавиться новый, либо изменится RefDesNUm
+            if next == prev:
+                tmp_tab['RefDesNum'][len(tmp_tab)-1] = component_slice['RefDesNum'][m+1]
+            else:
+                tmp_tab = tmp_tab.addrecords((component_slice['RefDes'][m+1], \
+                        component_slice['RefDesNum'][m+1], \
+                        component_slice['Item'][m+1], \
+                        component_slice['Sum'][m+1], \
+                        component_slice['Note'][m+1]))
+        #}}}
 
-				else:
-					sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1])
-					if sum > 2:
-						refdes = key + str(tmp_tab['RefDesNum'][m-1]+1) + '...' + key + str(tmp_tab['RefDesNum'][m])
-						refdes = scale(refdes)
-					if sum == 2:
-						refdes = key + str(tmp_tab['RefDesNum'][m-1]+1) + ', ' + key + str(tmp_tab['RefDesNum'][m])
-						refdes = scale(refdes)
-					if sum == 1:
-						refdes = key + str(tmp_tab['RefDesNum'][m])
-						#refdes = scale(refdes)
+        # обновление поля RefDes {{{
+        if len(tmp_tab) > 0:
 
-				# if we have more then one item in first line
-				if sum > 0:
-					tmp_tab['RefDes'][m] = refdes
-					tmp_tab['Sum'][m] = sum
-				m += 1
-		#}}}
-		tmp_tab = tmp_tab.deletecols(['RefDesNum']) # remove unneeded column
+            def scale(str):
+                str = '\scalebox{0.75}[1]{' + str + '}'
+                return str
 
-		# add LaTeX new line symbol {{{
-		if len(tmp_tab) > 0:
-			m = 0
-			last_col = tmp_tab.dtype.names[-1:][0]
-			while m < len(tmp_tab):
-				# may be better '\tabularnewline'?
-				tmp_tab[last_col][m] = tmp_tab[last_col][m] + '\\\\'
-				m += 1
-			# first and last must be ends by non breakable symbols
-			tmp_tab[last_col][0] = tmp_tab[last_col][0] + '*'
-			if len(tmp_tab) > 1:
-				tmp_tab[last_col][-1:] = tmp_tab[last_col][-1:][0] + '*'
-			if len(tmp_tab) > 2:
-				tmp_tab[last_col][-2:-1] = tmp_tab[last_col][-2:-1][0] + '*'
-		#}}}
-		
-		# Вставка типа компонента в список и сборка в одну выходную таблицу {{{
-		foot = tb.tabarray(records=[('','','','\\\\*'),('','','','\\\\')], names=(tmp_tab.dtype.names))
-		
-		if len(tmp_tab) > 0:
-			if len(tmp_tab) > 1: # у нас больше 1 наименования компонентов
-				# шапка и хвост для блока из одного типа элементов
-				title = '\centering{'+component_des[key][1] + '}'
-				head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
-				
-				# соберем в кучу шапку, тело и хвост
-				if firstrun:
-					pe3_out = head.rowstack([tmp_tab,foot])
-					firstrun = False
-				else:
-					pe3_out = pe3_out.rowstack([head,tmp_tab,foot])
+            m = 0
+            while m < len(tmp_tab):
+                sum = 0
+                if m == 0: # если мы в первом ряду
+                    sum = int(tmp_tab['RefDesNum'][m])
+                    if sum > 2:
+                        refdes = key + '1' + '...' + key + str(tmp_tab['RefDesNum'][m])
+                        refdes = scale(refdes)
+                    if sum == 2:
+                        refdes = key + '1' + ', ' + key + str(tmp_tab['RefDesNum'][m])
+                        refdes = scale(refdes)
+                    if sum == 1:
+                        refdes = key + str(tmp_tab['RefDesNum'][m])
+                        #refdes = scale(refdes)
 
-			else: # наименование только одно
-				# название вставляется прямо в строку
-				tmp_tab['Item'][0] = component_des[key][0] + ' ' + tmp_tab['Item'][0]
+                else:
+                    sum = int(tmp_tab['RefDesNum'][m]) - int(tmp_tab['RefDesNum'][m-1])
+                    if sum > 2:
+                        refdes = key + str(tmp_tab['RefDesNum'][m-1]+1) + '...' + key + str(tmp_tab['RefDesNum'][m])
+                        refdes = scale(refdes)
+                    if sum == 2:
+                        refdes = key + str(tmp_tab['RefDesNum'][m-1]+1) + ', ' + key + str(tmp_tab['RefDesNum'][m])
+                        refdes = scale(refdes)
+                    if sum == 1:
+                        refdes = key + str(tmp_tab['RefDesNum'][m])
+                        #refdes = scale(refdes)
 
-				if firstrun:
-					pe3_out = tmp_tab.rowstack([foot])
-					firstrun = False
-				else:
-					pe3_out = pe3_out.rowstack([tmp_tab,foot])
-		#}}}
+                # if we have more then one item in first line
+                if sum > 0:
+                    tmp_tab['RefDes'][m] = refdes
+                    tmp_tab['Sum'][m] = sum
+                m += 1
+        #}}}
+        tmp_tab = tmp_tab.deletecols(['RefDesNum']) # remove unneeded column
 
-	# запись полученной таблицы на диск
-	return pe3_out
+        # add LaTeX new line symbol {{{
+        if len(tmp_tab) > 0:
+            m = 0
+            last_col = tmp_tab.dtype.names[-1:][0]
+            while m < len(tmp_tab):
+                # may be better '\tabularnewline'?
+                tmp_tab[last_col][m] = tmp_tab[last_col][m] + '\\\\'
+                m += 1
+            # first and last must be ends by non breakable symbols
+            tmp_tab[last_col][0] = tmp_tab[last_col][0] + '*'
+            if len(tmp_tab) > 1:
+                tmp_tab[last_col][-1:] = tmp_tab[last_col][-1:][0] + '*'
+            if len(tmp_tab) > 2:
+                tmp_tab[last_col][-2:-1] = tmp_tab[last_col][-2:-1][0] + '*'
+        #}}}
+
+        # Вставка типа компонента в список и сборка в одну выходную таблицу {{{
+        foot = tb.tabarray(records=[('','','','\\\\*'),('','','','\\\\')], names=(tmp_tab.dtype.names))
+
+        if len(tmp_tab) > 0:
+            if len(tmp_tab) > 1: # у нас больше 1 наименования компонентов
+                # шапка и хвост для блока из одного типа элементов
+                title = '\centering{'+component_des[key][1] + '}'
+                head = tb.tabarray(records=[('',title,'','\\\\*'), ('','','','\\\\*')], names=(tmp_tab.dtype.names))
+
+                # соберем в кучу шапку, тело и хвост
+                if firstrun:
+                    pe3_out = head.rowstack([tmp_tab,foot])
+                    firstrun = False
+                else:
+                    pe3_out = pe3_out.rowstack([head,tmp_tab,foot])
+
+            else: # наименование только одно
+                # название вставляется прямо в строку
+                tmp_tab['Item'][0] = component_des[key][0] + ' ' + tmp_tab['Item'][0]
+
+                if firstrun:
+                    pe3_out = tmp_tab.rowstack([foot])
+                    firstrun = False
+                else:
+                    pe3_out = pe3_out.rowstack([tmp_tab,foot])
+        #}}}
+
+    return pe3_out
 #}}}
 
 
@@ -555,9 +614,9 @@ def pe3(x): # создание таблицы для перечня элементов{{{
 
 # command line parser{{{
 parser = argparse.ArgumentParser(
-		formatter_class=argparse.RawDescriptionHelpFormatter,
-		# Usage text {{{
-		description=('''\
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        # Usage text {{{
+        description=('''\
 ------------------------ P-CAD section ---------------------------------------
 
 Open schematic design in P-CAD. Go to menu File -> Reports.
@@ -582,42 +641,41 @@ On main dialog specify output filename
 Press "Generate"
 
   Note: You may record all this actions to P-CAD macro, and call them later.
-  
-Now you have list of components. 
+
+Now you have list of components.
 Process generated list by this script.
 
 
 ------------------------ Script section --------------------------------------
 '''))#}}}
 
-
 parser.add_argument('input_file', # {{{
-		metavar='filename',
-		type=file, 
-		help='path to file, generated by P-CAD') 
-		#}}}
+        metavar='filename',
+        type=file,
+        help='path to file, generated by P-CAD')
+        #}}}
 parser.add_argument('-p','--pe3',#{{{
-		metavar='FILENAME',
-		type=str,
-		default='pe3_table.tex',
-		help='save pe3 to %(metavar)s (default: %(default)s)')
-		#}}}
+        metavar='FILENAME',
+        type=str,
+        default='pe3_table.tex',
+        help='save pe3 to %(metavar)s (default: %(default)s)')
+        #}}}
 parser.add_argument('-s','--spec',#{{{
-		metavar='FILENAME',
-		type=str,
-		default='spec_table.tex',
-		help='save specification to %(metavar)s (default: %(default)s)')
-		#}}}
+        metavar='FILENAME',
+        type=str,
+        default='spec_table.tex',
+        help='save specification to %(metavar)s (default: %(default)s)')
+        #}}}
 parser.add_argument('-b','--bill',#{{{
-		metavar='FILENAME',
-		type=str,
-		default='bill_table.tex',
-		help='save bill list to %(metavar)s (default: %(default)s)')
-		#}}}
+        metavar='FILENAME',
+        type=str,
+        default='bill_table.tex',
+        help='save bill list to %(metavar)s (default: %(default)s)')
+        #}}}
 parser.add_argument('-d','--delimiter', #{{{
-		default='&',
-		type=str,
-		help='column separator in input file (default: %(default)s)')
+        default='&',
+        type=str,
+        help='column separator in input file (default: %(default)s)')
 #}}}
 
 args = parser.parse_args()
@@ -633,30 +691,32 @@ out = open('cleaned_output.tmp','r+')
 
 # delete empty lines and redundant quotes
 for line in (raw_input_file):
-	# использование в регулярках '$' почему-то не прокатывает
-	if re.search('^[	]*\r\n', line) == None: # if string non empty
-		line = re.sub('"','',line) # delete all quotes
-		line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
-		line = re.sub('\\\\','\\\\textbackslash ',line)
-		line = re.sub('%','\%',line)
-		line = re.sub('_','\_',line)
-		line = re.sub('#','\#',line)
-		line = re.sub('\^','\^',line)
-		line = re.sub('~','\~',line)
-		line = re.sub('{','\{',line)
-		line = re.sub('}','\}',line)
-		line = re.sub('\$','\$',line)
-		out.write(line)
+    # использование в регулярках '$' тут почему-то не прокатывает
+    # \r\n - виндовый конец строки, \n - юниксовый, так, на всякий случай
+    if re.search('^[    ]*\r\n|^[    ]*\n', line) == None: # if string non empty
+        line = re.sub('"','',line) # delete all quotes
+        line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
+        # screaning latex special symbols
+        line = re.sub('\\\\','\\\\textbackslash ',line)
+        line = re.sub('%','\%',line)
+        line = re.sub('_','\_',line)
+        line = re.sub('#','\#',line)
+        line = re.sub('\^','\^',line)
+        line = re.sub('~','\~',line)
+        line = re.sub('{','\{',line)
+        line = re.sub('}','\}',line)
+        line = re.sub('\$','\$',line)
+        out.write(line)
 
 # Hack! This line tell tabarray, that all columns contain string values
-# Don't forget to remove it after loading file
+# Remove it after loading file
 last_line = re.sub('[^&]',' ',raw_input_file[0])
 out.write(last_line)
 out.close()
 
 # reading file into array 
 x = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '&',headerlines=1)
-x = x[:-1] # remove hacked line
+x = x[:-1] # remove hack-line
 x = column_wide(x)
 tmp_tab = x # create temporal array
 os.remove("cleaned_output.tmp") # remove temporal file
@@ -691,7 +751,7 @@ save_to_file(args.pe3, pe3_array)
 # автоматический aggregate годится только для генерации спецификации
 # aggregate rows
 #def refdes_agg(i):
-#	return i[0]
+#   return i[0]
 #
 #tmp_tab = x.aggregate(On=['Title','Type','SType','Value','Docum','Addit','Note','OrderCode'])
 #
