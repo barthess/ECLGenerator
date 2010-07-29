@@ -411,11 +411,13 @@ def indexing(array): #{{{
             print '!!! Unknown element type:', array['RefDes'][m] + str(array['RefDesNum'][m])
         m += 1
     if fail:
-        print '\nДальнейшая работа невозможна из-за наличия элементов неизвестного типа.'
-        print 'Возможные причины: опечатка в RefDes при создании элемента для P-CAD,'
-        print '                   либо, это - новый элемент, отсутствующий в базе.'
-        print 'Если вышеуказанные элементы верны - добавьте их в базу \"component_des\"'
-        print 'и прогоните скрипт заново.'
+              #----------------- 78 dashes line ----------------------------------------------#
+        print '\nEmergency stop.'
+        print 'Possible reasons:'
+        print '  - mistype in RefDes during P-CAD element creation;'
+        print '  - it\'s correct new element but script don\'t know about them.'
+        print 'If elements above are correct - add them manually to the \"component_des\"'
+        print 'dictionary and run script again.'
         quit()
 #}}}
 
