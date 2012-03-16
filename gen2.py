@@ -11,12 +11,13 @@
 # Сжимать позиционные обозначения по горизонтали, только если одно из них
 # перевалило за 10
 
-# вставить обработку исключений при подгрузке питоновых модулей, подсказывать,
-# чего не хватает
-
 # Функция pe3 содержит данные, почти готовые для создания спецификации. Надо
 # их или временно сохранить и потом передать дальше, или вынести это в одну
 # (несколько?) внешнюю функцию
+
+
+
+#print tab.dtype.names
 
 
 import string
@@ -403,17 +404,11 @@ def pe3(intab): #{{{
     # merge columns
     m = 0
     while m < len(intab):
-        intab['Part Num'][m] += intab['Value'][m] + ' ' + intab['Mfg Name'][m] + intab['VID'][m] + intab['Vendor Part Num'][m]
+        intab['Part Num'][m] += ' ' + intab['Value'][m] + ' ' + intab['Mfg Name'][m] + ' ' + intab['VID'][m] + intab['Vendor Part Num'][m]
         m+=1
 
     # remove unnecessary columns
     intab = intab.deletecols(['Country of Origin', 'Unit Price', 'Value', 'VID', 'Vendor Part Num', 'Mfg Name'])
-
-    # create brand new table for pe3
-    pe3tab_names = ['Part','Item','Quantity','Note',]
-    pe3tab_formats = '|S1024,|S1024,|S1024,|S1024'
-    pe3tab_cnt = 0 # текущая позиция в выходном массиве
-    pe3tab = tb.tabarray(shape=(0,),names=pe3tab_names,formats=pe3tab_formats)
 
 
     def ismultiple(tab, i):
@@ -422,19 +417,26 @@ def pe3(intab): #{{{
             таблицу, в которой надо искать
             элемент, с которого надо начинать поиск """
 
-        s0 = tab[i][0]
+        part0 = tab[i][0]
+        item0 = tab[i][2]
 
-        try:
-            snext = tab[i+1][0]
-        except IndexError:
-            return False
+        n = 1
+        m = 0
+        # подсчитаем количество одинаковых Parts
+        while (i+n < len(tab)) and (part0 == tab[i+n][0]):
+            n+= 1
 
-        if s0 != snext:
+        if n == 1:
             return False
         else:
-            return True
+            while m < n:
+                m += 1
+                if (i+n < len(tab)) and (item0 != tab[i+m][2]):
+                    return True
+            return False
 
-    def calcmultiple(tab, i):
+
+    def calcsame_items(tab, i):
         """ Считает количество одинаковых элементов и возвращает их количество.
         Принимает:
             таблицу, в которой надо искать
@@ -452,7 +454,7 @@ def pe3(intab): #{{{
             n += 1
             i += 1
 
-    def aggregate_parts(tab, i, n):
+    def aggregate_items(tab, i, n):
         """ собирает пачку позиционных обозначений в одно поле
         Принимает:
             таблицу, в которой надо искать
@@ -467,27 +469,87 @@ def pe3(intab): #{{{
             return tab[i][0] + str(tab[i][1]) + '...' + tab[i+n][0] + str(tab[i+n][1])
 
 
-    # определяем, у нас один элемент, или больше
+
+    def get_partslice(tab, i):
+        n = 0
+        current_part = tab[i]['Part']
+        while (i+n < len(tab)) and (current_part == tab[i+n]['Part']):
+            n += 1
+        return tab[i:i+n]
+
+    def get_itemslice(tab, i):
+        n = 0
+        # print tab.dtype.names
+        current_item = tab[i]['Part Num']
+        while (i+n < len(tab)) and (current_item == tab[i+n]['Part Num']):
+            n += 1
+        return tab[i:i+n]
+
+
+    def compact_partslice(partslice):
+        pe3tab_names = ['Part','Item','Quantity','Note',]
+        pe3tab_formats = '|S1024,|S1024,|S1024,|S1024'
+        pe3tab_cnt = 0 # текущая позиция в выходном массиве
+        pe3tab = tb.tabarray(shape=(0,),names=pe3tab_names,formats=pe3tab_formats)
+
+        i = 0
+        single = False
+        part = partslice[0]['Part']
+        while (i < len(partslice)):
+            itemslice = get_itemslice(partslice, i)
+            parts = aggregate_items(itemslice, 0, len(itemslice))
+            i += len(itemslice)
+            if len(itemslice) == len(partslice):
+                single = True
+            else:
+                single = False
+
+            item = itemslice[0]['Part Num']
+            quantity = len(itemslice)
+            package = itemslice[0]['Package']
+            pe3tab = pe3tab.addrecords((parts, item, str(quantity), package + '\\tabularnewline'))
+
+        return (pe3tab, single, part)
+
+
+
+
+
     i = 0
-    n = 0
+
+    # create brand new table for pe3
+    pe3tab_names = ['Part','Item','Quantity','Note',]
+    pe3tab_formats = '|S1024,|S1024,|S1024,|S1024'
+    pe3tab_cnt = 0 # текущая позиция в выходном массиве
+    pe3tab = tb.tabarray(shape=(0,),names=pe3tab_names,formats=pe3tab_formats)
+    fakestr = 1024*'x'
+    pe3tab = pe3tab.addrecords((fakestr, fakestr, fakestr, fakestr))
+    # print pe3tab
+    # exit()
+
     while (i < len(intab)):
-        key = intab[i][0]
-        n = calcmultiple(intab, i)
-
-        if ismultiple(intab, i): # если деталей больше одной
-            blockname = component_des[key][1]
+        partslice = get_partslice(intab, i)
+        i += len(partslice)
+        p = compact_partslice(partslice)
+        if p[1] is True:
+            blockname = component_des[p[2]][0]
+            n = p[0]['Quantity'][0]
+            parts = p[0]['Part'][0]
+            item = p[0]['Item'][0]
             pe3tab = pe3tab.addrecords(('','','','\\tabularnewline'))
-            pe3tab = pe3tab.addrecords(('','\\centering{' + blockname + '}','','\\tabulrnewline*'))
-            pe3tab = pe3tab.addrecords(('','','','\\tabulrnewline*'))
-            item = intab[i][2]
+            pe3tab = pe3tab.addrecords((str(parts), blockname + ' ' + item, str(n), p[0]['Note'][0]))
         else:
-            blockname = component_des[key][0]
-            pe3tab = pe3tab.addrecords(('','','',''))
-            item = blockname + ' ' + intab[i][2]
+            blockname = component_des[p[2]][1]
+            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline'))
+            pe3tab = pe3tab.addrecords(('','\\centering{' + blockname + '}','','\\tabularnewline*'))
+            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline*'))
+            print '---', p[0]
+            # print pe3tab
+            pe3tab = pe3tab.rowstack(p[0])
 
-        parts = aggregate_parts(intab, i, n)
-        pe3tab = pe3tab.addrecords((parts, item, str(n), intab[i][3] + '\\tabularnewline'))
-        i += n
+    pe3tab = deleterow(pe3tab, 0)
+    print pe3tab
+    # exit()
 
     return pe3tab
 #}}}
@@ -575,18 +637,18 @@ out.write(last_line)
 out.close()
 
 # reading file into array
-x = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '\t')
-x = x[:-1] # remove hack-line
-x = columnwider(x)
-tmp_tab = x # create temporal array
+raw = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '\t')
+raw = raw[:-1] # remove hack-line
+raw = columnwider(raw)
+tmp_tab = raw # create temporal array
 os.remove("cleaned_output.tmp") # remove temporal file
 #}}}
 
 
-x = prepare(x)
+raw = prepare(raw)
 
 # build component list PE3
-pe3_array = pe3(x)
+pe3_array = pe3(raw)
 
 # save table to file
 savelatex(args.pe3, pe3_array)
@@ -604,7 +666,7 @@ savelatex(args.pe3, pe3_array)
 #def refdes_agg(i):
 #   return i[0]
 #
-#tmp_tab = x.aggregate(On=['Title','Type','SType','Value','Docum','Addit','Note','OrderCode'])
+#tmp_tab = raw.aggregate(On=['Title','Type','SType','Value','Docum','Addit','Note','OrderCode'])
 #
 #print tmp_tab
 #
