@@ -6,3 +6,5 @@
 *.origin
 .ropeproject/
 *.pdf
+*.pyc
+*.swp
