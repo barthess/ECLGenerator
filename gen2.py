@@ -86,7 +86,7 @@ def savelatex(filename, array): #{{{
 def pe3(db): #{{{
     """ Создание таблицы для перечня элементов.  """
 
-    # корпус и величину вставим в скобках
+    # корпус и номинал вставим в скобках
     m = 0
     while m < len(db):
         db['Part Num'][m] += ' (' + db['Package'][m]
@@ -94,9 +94,8 @@ def pe3(db): #{{{
             db['Part Num'][m] += ' ' + db['Value'][m] + ')'
         else:
             db['Part Num'][m] += ')'
-        db['Package'][m] += db['VID'][m] + ' ' + db['Vendor Part Num'][m]
+        db['Package'][m] = db['VID'][m] + ' ' + db['Vendor Part Num'][m]
         m+=1
-
     # remove unnecessary (now) columns
     db = db.deletecols(['Country of Origin', 'Unit Price', 'Value', 'VID', 'Vendor Part Num', 'Mfg Name'])
 
@@ -198,12 +197,16 @@ def pe3(db): #{{{
             pe3tab = pe3tab.rowstack(pe3piece)
             pe3tab = pe3tab.addrecords(('','','','\\tabularnewline*'))
             pe3tab = pe3tab.addrecords(('','','','\\tabularnewline'))
+    i = 0
+    while i < len(pe3tab):
+        # заключим Part в хитрый бокс
+        pe3tab['Part'][i] = '\ESKDsmartScaleBox{\\argi -2\\tabcolsep}{' + pe3tab['Part'][i] + '}'
+        print pe3tab['Part'][i]
+        i += 1
 
     # удалим ряд-распорку
     pe3tab = deleterow(pe3tab, 0)
     print pe3tab.dtype.names
-    print pe3tab
-    # exit()
 
     return pe3tab
 #}}}
@@ -281,7 +284,22 @@ out = open('cleaned_output.tmp','r+')
 
 # delete empty lines and redundant quotes
 for line in (raw_input_file):
-	out.write(line)
+    # использование в регулярках '$' тут почему-то не прокатывает
+    # \r\n - виндовый конец строки, \n - юниксовый, так, на всякий случай
+    if re.search('^[    ]*\r\n|^[    ]*\n', line) == None: # if string non empty
+        line = re.sub('"','',line) # delete all quotes
+        line = re.sub('[ ]*&[ ]*','&',line) # delete unneeded spaces
+        # screaning latex special symbols
+        line = re.sub('\\\\','\\\\textbackslash ',line)
+        line = re.sub('%','\%',line)
+        line = re.sub('_','\_',line)
+        line = re.sub('#','\#',line)
+        line = re.sub('\^','\^',line)
+        line = re.sub('~','\~',line)
+        line = re.sub('{','\{',line)
+        line = re.sub('}','\}',line)
+        line = re.sub('\$','\$',line)
+        out.write(line)
 
 # Hack!
 # This line tells tabarray, that all columns contain string values

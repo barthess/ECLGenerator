@@ -16,9 +16,23 @@ from globalvars import *
 def removeunneededvalues(tab):#{{{
     """ Вычищает поле Value у тех элементов, которые не имеют номинала,
     например, микросхемы """
+
+    def needkeep(st):
+        re_list = [ '^C[0:9]*',
+                    '^R[0:9]*',
+                    '^R[0:9]*',
+                    '^L[0:9]*',
+                    '^RK[0:9]*',
+                    '^RP[0:9]*',
+                    '^ZQ[0:9]*']
+        for i in re_list:
+            if (re.match(i, st)) != None:
+                return True
+        return False
+
     m = 0
     while m < len(tab):
-        if tab['Part'][m] != ('C' or 'R' or 'L' or 'RK' or 'RP' or 'ZQ'):
+        if not needkeep(tab['Part'][m]):
             tab['Value'][m] = ''
         m+=1
     return tab
@@ -167,6 +181,8 @@ def processvalues(tab): #{{{
         for regexp in (args):
             t1 = regexp.findall(oldstring)
             if len(t1) > 0:
+                # заэкранируем %
+                s1 = re.sub('%','\\\\%,',s1)
                 # вставим нужные отбивки
                 s1 = re.sub('([0-9]*)([.,]*)([0-9]*)([ ]*)([a-zA-Z\\\\%]*)','\\1\\2\\3",\\5',t1[0])
                 # заменить точку на запятую
@@ -181,10 +197,9 @@ def processvalues(tab): #{{{
             # надо удалить их из исходной строки
             oldstring = regexp.sub('',oldstring)
 
-        # остатки старой строки прилепить в конец новой
         # TODO: если осталось что-то кроме пробелов выдать варнинг
-        #if re.search('[^     ]*',oldstring)
-        newstring = newstring + oldstring
+        if len(oldstring) > 0:
+            print "Warning. Deleting" + '"' + oldstring + '"'
 	# снабдим процентаж знаком плюс-минус (\textpm)
 	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}",\\1',newstring)
         # вычистим из конца пробелы, которые остались от старой строки
@@ -203,8 +218,10 @@ def processvalues(tab): #{{{
             s = valueclean(s, capacitance, tolerance, voltage)
         elif part ==  'L':
             s = valueclean(s, inductance, tolerance, current)
-        elif (part == 'R') | (part == 'RK') | (part == 'RP'):
+        elif (part == 'R') | (part == 'RP'):
             s = valueclean(s, resistance, tolerance, power)
+        elif (part == 'RK'):
+            s = valueclean(s, current, power)
         elif part == 'ZQ':
             s = valueclean(s, frequency, tolerance)
         else: # обработчик лажи
@@ -311,6 +328,8 @@ def prepare(tab): # {{{
 
     # enclose in mbox
     tab = mboxing(tab, 'Part Num','Value', 'VID', 'Vendor Part Num', 'Mfg Name', 'Package', 'Country of Origin')
+    # print tab.dtype.names
+    # exit()
 
     return tab
 #}}}
