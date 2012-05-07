@@ -1,18 +1,25 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 
-
-
 import string
 import re
 import os
 import tabular as tb
-from operator import itemgetter # for sort() and sorted()
-import argparse
 import sys
 
 from globalvars import *
+import utils
 
+def removeplaceholders(tab):#{{{
+    """ remove '*' placeholders from input table"""
+    for i in tab.dtype.names:
+        m = 0
+        while m < len(tab):
+            if tab[i][m] == '*':
+                tab[i][m] = ''
+            m+=1
+    return tab
+    #}}}
 def removeunneededvalues(tab):#{{{
     """ Вычищает поле Value у тех элементов, которые не имеют номинала,
     например, микросхемы """
@@ -37,29 +44,12 @@ def removeunneededvalues(tab):#{{{
         m+=1
     return tab
     #}}}
-def insertprofiteername(tab):#{{{
-    """ Заменяет кодовое сокращение названием барыги """
+def quoteprofiteername(tab):#{{{
+    """ Заключает название барыги в типографские кавычки """
     m = 0
     while m < len(tab):
-        if tab['VID'][m] == 'FN':
-            tab['VID'][m] = '<<Farnell>>'
-        elif tab['VID'][m] == 'ME':
-            tab['VID'][m] = '<<Mouser>>'
-        elif tab['VID'][m] == 'DK':
-            tab['VID'][m] = '<<Digikey>>'
-        elif tab['VID'][m] == 'IN':
-            tab['VID'][m] = '<<Intergral>>'
+        tab['VID'][m] = '<<' + tab['VID'][m] + '>>'
         m+=1
-    return tab
-    #}}}
-def removeplaceholders(tab):#{{{
-    """ remove '*' placeholders from input table"""
-    for i in tab.dtype.names:
-        m = 0
-        while m < len(tab):
-            if tab[i][m] == '*':
-                tab[i][m] = ''
-            m+=1
     return tab
     #}}}
 def splitpartcolumn(tab):#{{{
@@ -197,9 +187,6 @@ def processvalues(tab): #{{{
             # надо удалить их из исходной строки
             oldstring = regexp.sub('',oldstring)
 
-        # TODO: если осталось что-то кроме пробелов выдать варнинг
-        if len(oldstring) > 0:
-            print "Warning. Deleting" + '"' + oldstring + '"'
 	# снабдим процентаж знаком плюс-минус (\textpm)
 	newstring = re.sub('([0-9]*[,]*[0-9]*",\\\\%)',' {\\\\textpm}",\\1',newstring)
         # вычистим из конца пробелы, которые остались от старой строки
@@ -231,7 +218,8 @@ def processvalues(tab): #{{{
                     unknown_element = False
             if unknown_element:
                 # аварийное завершение, скрипт не знает такого элемента
-                print 'Something goes wrong. I don\'t know element type:',part
+                print 'ERROR!. I don\'t know the element type:',part
+                print 'Add it manually.'
                 quit()
 
         # Дополнительные вычистки
@@ -264,42 +252,12 @@ def mboxing(tab, *columns): #{{{
     i = ''
     while m < len(tab):
         for i in (columns):
-            if not re.match('^[ ]*$', tab[i][m]):
+            if not re.match('^[ ]*$', tab[i][m]): # if not empty string
                 tab[i][m] = '\mbox{' + tab[i][m] + '}'
         m += 1
     return(tab)
 #}}}
-def columnwider(narrow_tab): #{{{
-    """ Функция для расширения столбцов
 
-    Принимает обычную таблицу, возвращает "раздутую"
-
-    Из-за недоработок класса tabular колонки не могут расширяться динамически,
-    поэтому на придется заранее вставить в конец файла поля заведомо
-    бОльшей ширины.
-    """
-    # crate fake row
-    first_row = narrow_tab[:1] # возьмем первый ряд для определения типа колонок
-    empty_tuple = ()
-
-    for i in first_row.dtype.names:
-        if (type(first_row[i][0]).__name__) == 'string_':
-            empty_tuple += (column_strut,)
-        else:
-            empty_tuple +=('',)
-
-    wide_row = tb.tabarray(records=(empty_tuple,), names=list(first_row.dtype.names))
-
-    # now we have table from one empty wide row
-    # stack them to input table
-    wide_tab = narrow_tab.rowstack([wide_row])
-
-    # for now wide row is unnecessary
-    # remove them
-    wide_tab = wide_tab[:-1]
-
-    return wide_tab
-#}}}
 
 def prepare(tab): # {{{
     """ Функция предварительной очистки и подготовки.
@@ -308,7 +266,7 @@ def prepare(tab): # {{{
 
     tab = removeplaceholders(tab)
     tab = removeunneededvalues(tab)
-    tab = insertprofiteername(tab)
+    tab = quoteprofiteername(tab)
     tab = splitpartcolumn(tab)
     tab = removeemptypartfield(tab)
     tab = removeunndedcolumns(tab)

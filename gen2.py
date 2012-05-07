@@ -29,6 +29,8 @@ import argparse
 import sys
 
 import prepare
+import utils
+import pe3
 from globalvars import *
 
 
@@ -82,133 +84,6 @@ def savelatex(filename, array): #{{{
     f.close()
 
     os.remove('table.tmp')
-#}}}
-def pe3(db): #{{{
-    """ Создание таблицы для перечня элементов.  """
-
-    # корпус и номинал вставим в скобках
-    m = 0
-    while m < len(db):
-        db['Part Num'][m] += ' (' + db['Package'][m]
-        if db['Value'][m] != '':
-            db['Part Num'][m] += ' ' + db['Value'][m] + ')'
-        else:
-            db['Part Num'][m] += ')'
-        db['Package'][m] = db['VID'][m] + ' ' + db['Vendor Part Num'][m]
-        m+=1
-    # remove unnecessary (now) columns
-    db = db.deletecols(['Country of Origin', 'Unit Price', 'Value', 'VID', 'Vendor Part Num', 'Mfg Name'])
-
-
-    def aggregate_items(tab, i, n):#{{{
-        """ собирает пачку позиционных обозначений в одно поле
-        Принимает:
-            таблицу, в которой надо искать
-            позицию, с которой надо искать
-            количество одинаковых элементов"""
-        if n == 1:
-            return tab[i][0] + str(tab[i][1])
-        elif n == 2:
-            return tab[i][0] + str(tab[i][1]) + ', ' + tab[i+1][0] + str(tab[i+1][1])
-        else:
-            #TODO: replace 3 dots by latex symbol
-            return tab[i][0] + str(tab[i][1]) + '...' + tab[i+n-1][0] + str(tab[i+n-1][1])
-        #}}}
-    def getslice(tab, i, st):#{{{
-        """ Функция выкусывает срез строк с одинаковыми значениями в столбце
-        Принимает:
-            таблицу
-            номер элемента, с которого надо начинать поиск
-            строку с именем столбца, в котором производится поиск
-        Возвращает:
-            таблицу, содержащую срез """
-        n = 0
-        # print tab.dtype.names
-        current_item = tab[i][st]
-        while (i+n < len(tab)) and (current_item == tab[i+n][st]):
-            n += 1
-        return tab[i:i+n]
-        #}}}
-    def newpe3tab():#{{{
-        """ Создает пустую таблицу для перечня элементов и добавляет в нее распорку """
-        pe3tab_names = ['Part','Item','Quantity','Note',]
-        pe3tab_formats = '|S1024,|S1024,|S1024,|S1024'
-        pe3tab_cnt = 0 # текущая позиция в выходном массиве
-        tab = tb.tabarray(shape=(0,),names=pe3tab_names,formats=pe3tab_formats)
-        fakestr = 1024*'x'
-        tab = tab.addrecords((fakestr, fakestr, fakestr, fakestr))
-        return tab
-        #}}}
-    def compact_partslice(partslice):#{{{
-        pe3tab = newpe3tab()
-
-        i = 0
-        single = False
-        part = partslice[0]['Part']
-        while (i < len(partslice)):
-            itemslice = getslice(partslice, i, 'Part Num')
-            parts = aggregate_items(itemslice, 0, len(itemslice))
-            i += len(itemslice)
-            if len(itemslice) == len(partslice):
-                single = True
-            else:
-                single = False
-
-            item = itemslice[0]['Part Num']
-            quantity = len(itemslice)
-            package = itemslice[0]['Package']
-            pe3tab = pe3tab.addrecords((parts, item, str(quantity), package + '\\tabularnewline'))
-
-        # удалим ряд-распорку
-        pe3tab = deleterow(pe3tab, 0)
-        return (pe3tab, single, part)
-        #}}}
-
-
-    # create brand new table for pe3
-    pe3tab = newpe3tab()
-
-    i = 0
-    while (i < len(db)):
-        partslice = getslice(db, i, 'Part')
-        i += len(partslice)
-        p = compact_partslice(partslice)
-        pe3piece = p[0]
-        if p[1] is True:
-            blockname = component_des[p[2]][0]
-            n = pe3piece['Quantity'][0]
-            parts = pe3piece['Part'][0]
-            item = pe3piece['Item'][0]
-            pe3tab = pe3tab.addrecords((str(parts), blockname + ' ' + item, str(n), pe3piece['Note'][0] + '*'))
-            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline*'))
-            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline'))
-        else:
-            blockname = component_des[p[2]][1]
-            pe3tab = pe3tab.addrecords(('','\\centering{' + blockname + '}','','\\tabularnewline*'))
-            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline*'))
-            pe3piece['Note'][0] += '*'
-
-            if len(pe3piece) == 2:
-                pe3piece['Note'][-1] += '*'
-            elif len(pe3piece) > 2:
-                pe3piece['Note'][-1] += '*'
-                pe3piece['Note'][-2] += '*'
-
-            pe3tab = pe3tab.rowstack(pe3piece)
-            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline*'))
-            pe3tab = pe3tab.addrecords(('','','','\\tabularnewline'))
-    i = 0
-    while i < len(pe3tab):
-        # заключим Part в хитрый бокс
-        pe3tab['Part'][i] = '\ESKDsmartScaleBox{\\argi -2\\tabcolsep}{' + pe3tab['Part'][i] + '}'
-        print pe3tab['Part'][i]
-        i += 1
-
-    # удалим ряд-распорку
-    pe3tab = deleterow(pe3tab, 0)
-    print pe3tab.dtype.names
-
-    return pe3tab
 #}}}
 
 
@@ -311,16 +186,16 @@ out.close()
 # reading file into array
 raw = tb.tabarray(SVfile = "cleaned_output.tmp",delimiter = '\t')
 raw = raw[:-1] # remove hack-line
-raw = prepare.columnwider(raw)
+raw = utils.columnwider(raw)
 tmp_tab = raw # create temporal array
 os.remove("cleaned_output.tmp") # remove temporal file
 #}}}
 
-
+# create common data base for later processing
 bd = prepare.prepare(raw)
 
 # build component list PE3
-pe3_array = pe3(bd)
+pe3_array = pe3.pe3(bd)
 
 # save table to file
 savelatex(args.pe3, pe3_array)
