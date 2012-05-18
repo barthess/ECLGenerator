@@ -89,6 +89,7 @@ def __mergecolumns(db):#{{{
         description = ''
         if db['Package'][m] != '':
             description += db['Package'][m] + ' '
+            db['Package'][m] = '' # нужно обнулить, чтобы не попал в примечания
         if db['Value'][m] != '':
             description += db['Value'][m] + ' '
         if description != '':
