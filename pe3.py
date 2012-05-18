@@ -87,22 +87,17 @@ def __mergecolumns(db):#{{{
     m = 0
     while m < len(db):
         description = ''
-        if db['Mfg Name'][m] != '':
-            description += db['Mfg Name'][m] + ' '
-        if db['Value'][m] != '':
-            description += db['Value'][m] + ' '
         if db['Package'][m] != '':
             description += db['Package'][m] + ' '
-            db['Package'][m] = ''
-        # if db['VID'][m] != '':
-        #     description += db['VID'][m] + ' '
-        # if db['Vendor Part Num'][m] != '':
-        #     description += db['Vendor Part Num'][m] + ' '
-
+        if db['Value'][m] != '':
+            description += db['Value'][m] + ' '
         if description != '':
             description = description[0:-1]
-            db['Part Num'][m] += ' (' + description + ')'
-
+            description = ' (' + description + ')'
+        if db['Mfg Name'][m] != '':
+            description = db['Mfg Name'][m] + ' ' + description
+        if description != '':
+            db['Part Num'][m] += ' ' + description
         m+=1
     # remove unnecessary (now) columns
     db = db.deletecols(['Country of Origin', 'Unit Price', 'Value', 'VID', 'Vendor Part Num', 'Mfg Name'])
